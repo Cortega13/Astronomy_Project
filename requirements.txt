@@ -1,0 +1,9 @@
+tables
+numpy
+pandas
+optuna
+scikit-learn
+joblib
+torch
+torchvision
+torchaudio
