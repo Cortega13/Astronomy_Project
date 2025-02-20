@@ -39,7 +39,10 @@ def sample_initial_conditions(
     return inputs
 
 
-def add_timesteps_to_conditions(initial_conditions, num_timesteps=95):
+def add_timesteps_to_conditions(
+    initial_conditions: torch.Tensor,
+    num_timesteps:int = 95
+    ):
     """
     Adds a time column to the initial conditions tensor.
     """
@@ -49,6 +52,22 @@ def add_timesteps_to_conditions(initial_conditions, num_timesteps=95):
     
     initial_conditions_with_time = torch.cat((time_column, initial_conditions), dim=1)
     return initial_conditions_with_time
+
+def add_multiple_timesteps_to_conditions(
+    initial_conditions: torch.Tensor,
+    num_timesteps: int = 95
+):
+    """
+    Expands the initial conditions tensor to include copies for each timestep.
+    Adds a time column to the expanded tensor.
+    """
+    time_values = torch.linspace(1, num_timesteps, steps=num_timesteps, device=initial_conditions.device).view(num_timesteps, 1) / 100
+
+    expanded_conditions = initial_conditions.repeat(num_timesteps, 1)
+
+    conditions_with_time = torch.cat((time_values, expanded_conditions), dim=1)
+    
+    return conditions_with_time
 
 
 def reconstruct_results(initial_conditions_with_time, decoded_features):
@@ -92,11 +111,10 @@ def histogram_physical_parameters(
 
 
 def plot_abundances_vs_time_comparison(
-    config,
-    original_abundances: pd.DataFrame, 
-    reconstructed_abundances: pd.DataFrame, 
+    actual: pd.DataFrame, 
+    predicted: pd.DataFrame, 
     species_of_interest: list, 
-    model_num_index: int
+    output_path: str = "plots/abundances_vs_time/unnamed.png"
     ):
     """
     Plotting the reconstructed and original abundances on a chemical evolution plot.
@@ -104,20 +122,20 @@ def plot_abundances_vs_time_comparison(
     """
     
     plt.figure(figsize=(10, 6))
-    colors = plt.colormaps.get_cmap('tab10')
-    for idx, species in enumerate(species_of_interest):
-        timesteps = np.arange(0, len(reconstructed_abundances[species]))
-        
+    colors = plt.colormaps.get_cmap('tab20')
+    
+    timesteps = np.arange(0, min(len(actual), len(predicted)))
+    for idx, species in enumerate(species_of_interest):        
         plt.plot(
             timesteps, 
-            np.log10(original_abundances), 
+            np.log10(actual[species])[:len(timesteps)], 
             label=f"{species} Actual", 
             color=colors(idx), 
             linestyle="-"
         )
         plt.plot(
             timesteps, 
-            np.log10(reconstructed_abundances[species]), 
+            np.log10(predicted[species])[:len(timesteps)], 
             label=f"{species} Predicted", 
             color=colors(idx), 
             linestyle="--"
@@ -129,8 +147,7 @@ def plot_abundances_vs_time_comparison(
 
     # Save the plot
     plt.tight_layout()
-    plot_path = os.path.join(config.working_path, f"plots/abundances_vs_time_comparison{model_num_index+1}.png")
-    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plt.savefig(output_path, dpi=200, bbox_inches="tight")
     
 
 def scatter_abundances_vs_physical_parameters(
