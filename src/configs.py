@@ -92,7 +92,7 @@ class EMConfig:
     max_epochs = 999999
     gradient_clipping = 2
     pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/emulator.pth")
-    save_model_path = os.path.join(DatasetConfig.working_path, "models/emulator1.pth")
+    save_model_path = os.path.join(DatasetConfig.working_path, "models/emulator.pth")
     dropout = 0.1
     save_model = True
     shuffle = True

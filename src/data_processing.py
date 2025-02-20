@@ -564,14 +564,13 @@ def calculate_emulator_index_pairs(
 
 
 def physical_parameter_scaling(
-    dataset_config, 
     dataset_np: np.ndarray
     ):
     """
     Preprocesses the dataset by minmax scaling the latent components to (0, 1) and scaling the physical parameters.
     """
-    num_metadata = len(dataset_config.metadata)
-    num_physical_parameters = len(dataset_config.physical_parameters)
+    num_metadata = len(DatasetConfig.metadata)
+    num_physical_parameters = len(DatasetConfig.physical_parameters)
 
     # Log10 scaling the physical parameters.
     left_index = num_metadata
@@ -580,8 +579,8 @@ def physical_parameter_scaling(
         dataset_np[:, left_index:right_index]
     )
     # Minmax scaling the physical parameters.
-    for i, parameter in enumerate(dataset_config.physical_parameter_ranges):
-        param_min, param_max = dataset_config.physical_parameter_ranges[parameter]
+    for i, parameter in enumerate(DatasetConfig.physical_parameter_ranges):
+        param_min, param_max = DatasetConfig.physical_parameter_ranges[parameter]
         log_param_min, log_param_max = np.log10(param_min), np.log10(param_max)
         index = num_metadata + i
         dataset_np[:, index] = (dataset_np[:, index] - log_param_min) / (log_param_max - log_param_min)
@@ -740,6 +739,20 @@ def reconstruct_emulated_outputs(encoded_inputs, emulated_outputs):
 
 
 ### Inferencing Functions
+def encoder_inferencing(autoencoder, inputs, batch_size=8192):
+    preencoded_features = abundances_scaling(inputs[:, -DatasetConfig.num_species:])
+    encoded_features = []
+    for batch_start in range(0, len(preencoded_features), batch_size):
+        batch_end = min(batch_start + batch_size, len(preencoded_features))
+        batch = preencoded_features[batch_start:batch_end]
+        batch = batch.to(device)
+        batch_encoded = autoencoder.encode(batch)
+        encoded_features.append(batch_encoded)
+    encoded_features = torch.cat(encoded_features, dim=0)
+    
+    return encoded_features
+
+
 def decoder_inferencing(autoencoder, emulated_features, batch_size=8192):
     decoded_features = []
     for batch_start in range(0, len(emulated_features), batch_size):
@@ -755,8 +768,11 @@ def decoder_inferencing(autoencoder, emulated_features, batch_size=8192):
     return decoded_features
 
 
-def emulator_inferencing(emulator, encoded_inputs, batch_size=8192):
+def emulator_inferencing(emulator, encoded_inputs, scale_components=True, batch_size=8192):
     num_physical_parameters = DatasetConfig.num_physical_parameters
+    
+    if scale_components:
+        encoded_inputs[:, 1+num_physical_parameters:] = latent_components_scaling(encoded_inputs[:, 1+num_physical_parameters:])
     
     emulated_outputs = []
     for batch_start in range(0, len(encoded_inputs), batch_size):
@@ -764,7 +780,7 @@ def emulator_inferencing(emulator, encoded_inputs, batch_size=8192):
         batch = encoded_inputs[batch_start:batch_end].to(device)
         batch_outputs = emulator(batch)
         emulated_outputs.append(batch_outputs)
-        
+    
     emulated_outputs = torch.cat(emulated_outputs, dim=0)
     emulated_outputs = inverse_latent_components_scaling(emulated_outputs)
     

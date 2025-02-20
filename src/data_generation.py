@@ -1,9 +1,12 @@
 import pandas as pd
 import numpy as np
 import os
-import uclchem
 from joblib import Parallel, delayed
 from scipy.stats import qmc
+try:
+    import uclchem
+except ImportError:
+    print("UCLChem not installed. Data Generation disabled.")
 
 class DataGenerator:
     def __init__(self, config):

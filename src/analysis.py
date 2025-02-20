@@ -200,7 +200,7 @@ def scatter_abundances_vs_physical_parameters(
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         savefig_path = os.path.join(folder_path, f"{species}.png")
-        plt.savefig(savefig_path, dpi=300, bbox_inches="tight")
+        plt.savefig(savefig_path, dpi=200, bbox_inches="tight")
         plt.show()
 ### Plot Functions
 
@@ -219,60 +219,32 @@ def calculate_conservation_error(
     """
     # Calculates the conservation error.
     
-    unscaled_tensor1 = check_conservation(tensor1).mean(dim=0, keepdim=True)
-    unscaled_tensor2 = check_conservation(tensor2).mean(dim=0, keepdim=True)
+    unscaled_tensor1 = dp.conservation_matrix_mult(tensor1).mean(dim=0, keepdim=True)
+    unscaled_tensor2 = dp.conservation_matrix_mult(tensor2).mean(dim=0, keepdim=True)
     conservation_error = abs(unscaled_tensor1 - unscaled_tensor2) / unscaled_tensor1
     return unscaled_tensor1, unscaled_tensor2, conservation_error.mean().item()
 
 
 def calculate_mace_error(
-    original_abundances: torch.Tensor, 
-    reconstructed_abundances: torch.Tensor
-    ):
+    original_abundances: torch.Tensor,
+    reconstructed_abundances: torch.Tensor):
     """
-    This is the error function defined in the MACE github repository.
+    Calculate the MACE error as defined in the MACE github repository.
     """
+    mace_maximum_abundance = 0.85 # Maximum abundance defined in MACE github.
     
-    original_abundances_np = original_abundances.cpu().numpy()
-    reconstructed_abundances_np = reconstructed_abundances.cpu().numpy()
+    original_clipped = torch.clamp(original_abundances, min=0.0, max=mace_maximum_abundance)
+    reconstructed_clipped = torch.clamp(reconstructed_abundances, min=0.0, max=mace_maximum_abundance)
     
-    ### Optional Clipping.
-    # In the MACE repo, their maximum abundance is defined as 0.85.
-    mace_maximum_abundance = 0.85
+    log_original = torch.log10(original_clipped)
+    log_reconstructed = torch.log10(reconstructed_clipped)
     
-    original_abundances_np = np.clip(original_abundances_np, 0, mace_maximum_abundance, dtype=np.float32)
-    reconstructed_abundances_np = np.clip(reconstructed_abundances_np, 0, mace_maximum_abundance, dtype=np.float32)
+    mace_species_error = (log_original - log_reconstructed) / log_reconstructed
     
-    mace_species_error = (np.log10(original_abundances_np[:])-np.log10(reconstructed_abundances_np))[:]/np.log10(reconstructed_abundances_np[:][:])
-    num_samples = len(original_abundances_np[:,0])
-
-    # Since MACE has 468 species, and we have 335, we multiply our error by 468/335 for a fair comparison.
-    mace_error = np.abs(mace_species_error).sum()/num_samples * (468 / 334)
-    return mace_species_error, mace_error
-
-
-def calculate_relative_error(
-    original_abundances: torch.Tensor, 
-    reconstructed_abundances: torch.Tensor
-    ):
-    """
-    Returns
-    mean_relative_error, std_relative_error, highest_20_species_mean_relative_error
-    """
+    # Average the absolute error over the samples, and then scale by the factor for fair comparison.
+    # MACE has 468 species and we have 335, so we multiply by 468/335.
+    num_samples = original_abundances.shape[0]
+    mace_factor = 468.0 / 335.0
+    mace_error = torch.abs(mace_species_error).sum() / num_samples * mace_factor
     
-    relative_error = (abs((original_abundances - reconstructed_abundances)) / original_abundances).mean(dim=0)
-    sorted_errors, _ = torch.sort(relative_error, descending=True)
-    
-    return relative_error.mean(), relative_error.std(), sorted_errors[:20]
-### Statistics Functions
-
-
-def results_analysis(outputs, decoded_outputs):
-    mace_species_error, mace_error = calculate_mace_error(outputs, decoded_outputs)
-    mean_relative_error, std_relative_error, highest_species_error = calculate_relative_error(outputs, decoded_outputs)
-    mean_original_elemental_abundances, mean_reconstruction_elemental_abundances, conservation_error = calculate_conservation_error(decoded_outputs, outputs)
-
-    print(f"Conservation Error: {conservation_error:.3e}")
-    print(f"MACE Error: {mace_error:.4e}")
-    print(f"Mean Relative Error: {mean_relative_error:.3e} | Std Relative Error: {std_relative_error:.3e}")
-    print()
+    return mace_error
