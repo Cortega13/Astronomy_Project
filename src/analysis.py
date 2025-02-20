@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import os
 import torch
-from .configs import DatasetConfig
+from .configs import DatasetConfig, PredefinedTensors
 from . import data_processing as dp
 
 
@@ -202,12 +202,40 @@ def scatter_abundances_vs_physical_parameters(
         savefig_path = os.path.join(folder_path, f"{species}.png")
         plt.savefig(savefig_path, dpi=200, bbox_inches="tight")
         plt.show()
-### Plot Functions
 
+
+def plot_error_vs_time(
+    errors: torch.Tensor,
+    label: str = 'Mean MRE across species',
+    save_path: str = "plots/errors/unnamed.png"
+    ):
+    """
+    Helper function for plotting errors across time.
+    """
+    errors = errors.cpu().numpy()
+    timesteps = np.arange(DatasetConfig.num_timesteps_per_model)
+
+    plt.figure(figsize=(8, 6))
+    plt.scatter(timesteps + 1, errors, label=f'{label}\nMin: {errors.min():.6f}\nMax: {errors.max():.6f}\nMean: {errors.mean():.6f}', color='b', zorder=2)
+    plt.plot(timesteps + 1, errors, color='b', linewidth=1, alpha=0.7, zorder=1)
+
+    plt.xlabel('Time (x1000 years)')
+    plt.ylabel(f'{label}')
+    plt.title(f'{label} vs. Time')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(save_path, dpi=200, bbox_inches="tight")
+    plt.show()
 
 
 
 ### Statistics Functions
+@torch.jit.script
+def calculate_relative_error(feature, target):
+    return (torch.abs(target - feature) / target)
+
+
+@torch.jit.script
 def calculate_conservation_error(
     tensor1: torch.Tensor, 
     tensor2: torch.Tensor
@@ -219,32 +247,30 @@ def calculate_conservation_error(
     """
     # Calculates the conservation error.
     
-    unscaled_tensor1 = dp.conservation_matrix_mult(tensor1).mean(dim=0, keepdim=True)
-    unscaled_tensor2 = dp.conservation_matrix_mult(tensor2).mean(dim=0, keepdim=True)
-    conservation_error = abs(unscaled_tensor1 - unscaled_tensor2) / unscaled_tensor1
-    return unscaled_tensor1, unscaled_tensor2, conservation_error.mean().item()
+    unscaled_tensor1 = dp.conservation_matrix_mult(tensor1)
+    unscaled_tensor2 = dp.conservation_matrix_mult(tensor2)
+    conservation_error = torch.abs(unscaled_tensor1 - unscaled_tensor2) / unscaled_tensor1
+    return torch.mean(conservation_error, dim=1)
 
 
+@torch.jit.script
 def calculate_mace_error(
     original_abundances: torch.Tensor,
-    reconstructed_abundances: torch.Tensor):
+    reconstructed_abundances: torch.Tensor,
+    max_abundance: torch.Tensor = PredefinedTensors.mace_max_abundance, # Maximum abundance defined in MACE github.
+    mace_factor: float = PredefinedTensors.mace_factor # MACE has 468 species and we have 335, so we multiply by 468/335.
+    ):
     """
     Calculate the MACE error as defined in the MACE github repository.
-    """
-    mace_maximum_abundance = 0.85 # Maximum abundance defined in MACE github.
-    
-    original_clipped = torch.clamp(original_abundances, min=0.0, max=mace_maximum_abundance)
-    reconstructed_clipped = torch.clamp(reconstructed_abundances, min=0.0, max=mace_maximum_abundance)
+    """    
+    original_clipped = torch.clamp(original_abundances, min=0.0, max=max_abundance)
+    reconstructed_clipped = torch.clamp(reconstructed_abundances, min=0.0, max=max_abundance)
     
     log_original = torch.log10(original_clipped)
     log_reconstructed = torch.log10(reconstructed_clipped)
     
     mace_species_error = (log_original - log_reconstructed) / log_reconstructed
     
-    # Average the absolute error over the samples, and then scale by the factor for fair comparison.
-    # MACE has 468 species and we have 335, so we multiply by 468/335.
-    num_samples = original_abundances.shape[0]
-    mace_factor = 468.0 / 335.0
-    mace_error = torch.abs(mace_species_error).sum() / num_samples * mace_factor
+    mace_error = torch.abs(mace_species_error) * mace_factor
     
-    return mace_error
+    return mace_error.sum(dim=1)

@@ -80,10 +80,10 @@ class EMConfig:
     
     # Hyperparameters Config
     lr = 1e-4
-    lr_decay = 0.5
+    lr_decay = 0.8
     lr_decay_patience = 6
-    betas = (0.7, 0.8)
-    weight_decay = 1e-4
+    betas = (0.5, 0.8)
+    weight_decay = 5e-5
     loss_scaling_factor = 1e-3
     exponential_coefficient = 26
     alpha = 3e3
@@ -92,8 +92,8 @@ class EMConfig:
     max_epochs = 999999
     gradient_clipping = 2
     pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/emulator.pth")
-    save_model_path = os.path.join(DatasetConfig.working_path, "models/emulator.pth")
-    dropout = 0.1
+    save_model_path = os.path.join(DatasetConfig.working_path, "models/emulator1.pth")
+    dropout = 0.2
     save_model = True
     shuffle = True
 
@@ -116,3 +116,6 @@ class PredefinedTensors:
     exponential_coefficient = torch.tensor(EMConfig.exponential_coefficient, dtype=torch.float32).to(device)
     
     alpha = torch.tensor(EMConfig.alpha, dtype=torch.float32).to(device)
+    
+    mace_max_abundance = torch.tensor(0.85, dtype=torch.float32).to(device)
+    mace_factor = torch.tensor(468/335, dtype=torch.float32).to(device)
