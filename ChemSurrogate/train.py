@@ -98,25 +98,6 @@ class Trainer:
         print()
 
 
-    def train(self):
-        """
-        Training loop for the model. Runs until the minimum loss stagnates for a number of epochs.
-        """
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-        
-        for epoch in range(self.model_config.max_epochs):
-            self._run_epoch(epoch)
-            self._check_minimum_loss()
-            if self._check_early_stopping():
-                break
-        
-        gc.collect()
-        torch.cuda.empty_cache()
-        print(f"\nTraining Complete. Trial Results: {self.metric_minimum_loss}")
-
-
 class AutoencoderTrainer(Trainer):
     def __init__(
         self,
@@ -130,16 +111,15 @@ class AutoencoderTrainer(Trainer):
         """
         Initializes the AutoencoderTrainer, a subclass of Trainer, specialized for training the autoencoder.
         """
-        encoded_min, encoded_max = config.scalers["encoded_components"]
-        self.encoded_min = torch.tensor(encoded_min).to(device)
-        self.encoded_max = torch.tensor(encoded_max).to(device)
+        self.encoded_min = torch.tensor(999).to(device)
+        self.encoded_max = torch.tensor(-999).to(device)
         
         self.num_metadata = len(self.config.metadata)
         self.num_physical_parameters = len(self.config.physical_parameters)
         self.num_total_species = len(self.config.total_species)
         self.num_components = self.config.latent_components
         
-        self.ae=ae = ae
+        self.ae = autoencoder
         
         super().__init__(
             model=autoencoder,
@@ -152,6 +132,14 @@ class AutoencoderTrainer(Trainer):
         )
 
 
+    def _save_minmax_components(self):
+        """
+        Saves the minimum and maximum values of the encoded components.
+        """
+        minmax = torch.stack([self.encoded_min, self.encoded_max]).cpu().numpy()
+        np.save(self.config.minmax_scalers_path, minmax)
+
+
     def _run_training_batch(self, features):
         """
         Runs a training batch where features = targets since this is an autoencoder.
@@ -159,6 +147,10 @@ class AutoencoderTrainer(Trainer):
         self.optimizer.zero_grad()
         outputs = self.model(features)
         loss = self.training_criterion(outputs, features)
+        
+        self.encoded_min = min(outputs.min(), self.encoded_min)
+        self.encoded_max = max(outputs.max(), self.encoded_max)
+        
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.gradient_clipping)
         self.optimizer.step()
@@ -170,6 +162,10 @@ class AutoencoderTrainer(Trainer):
         """
         outputs = self.model(features)
         loss = self.validation_criterion(outputs, features)
+        
+        self.encoded_min = min(outputs.min(), self.encoded_min)
+        self.encoded_max = max(outputs.max(), self.encoded_max)
+        
         self.epoch_validation_loss += loss
 
 
@@ -192,6 +188,27 @@ class AutoencoderTrainer(Trainer):
 
         toc = datetime.now()
         print(f"Training Time: {tic2 - tic1} | Validation Time: {toc - tic2}\n")
+
+
+    def train(self):
+        """
+        Training loop for the autoencoder. Runs until the minimum loss stagnates for a number of epochs.
+        """
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
+        for epoch in range(self.model_config.max_epochs):
+            self._run_epoch(epoch)
+            self._check_minimum_loss()
+            if self._check_early_stopping():
+                break
+
+        self._save_minmax_components()
+
+        gc.collect()
+        torch.cuda.empty_cache()
+        print(f"\nTraining Complete. Trial Results: {self.metric_minimum_loss}")
 
 
 class EmulatorTrainer(Trainer):
@@ -279,7 +296,36 @@ class EmulatorTrainer(Trainer):
         print(f"Training Time: {tic2 - tic1} | Validation Time: {toc - tic2}")
 
 
+    def train(self):
+        """
+        Training loop for the model. Runs until the minimum loss stagnates for a number of epochs.
+        """
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        
+        for epoch in range(self.model_config.max_epochs):
+            self._run_epoch(epoch)
+            self._check_minimum_loss()
+            if self._check_early_stopping():
+                break
+        
+        gc.collect()
+        torch.cuda.empty_cache()
+        print(f"\nTraining Complete. Trial Results: {self.metric_minimum_loss}")
+
+
 def load_objects(is_inference=False, include_emulator=True):
+    
+    ae = Autoencoder(
+        input_dim=AEConfig.input_dim,
+        latent_dim=AEConfig.latent_dim,
+        hidden_dim=AEConfig.hidden_dim,
+        noise=0.0 if is_inference else AEConfig.noise,
+    ).to(device)
+    if os.path.exists(AEConfig.pretrained_model_path):
+        ae.load_state_dict(torch.load(AEConfig.pretrained_model_path))
+
     if include_emulator:
         emulator = Emulator(
             input_dim=EMConfig.input_dim,
@@ -294,20 +340,16 @@ def load_objects(is_inference=False, include_emulator=True):
         emulator = None
     
     if is_inference:
-        emulator.eval()
-        for param in emulator.parameters():
+        ae.eval()
+    
+        for param in ae.parameters():
             param.requires_grad = False
+
+        if include_emulator:
+            emulator.eval()
+            for param in emulator.parameters():
+                param.requires_grad = False
     
-    ae = Autoencoder(
-        input_dim=AEConfig.input_dim,
-        latent_dim=AEConfig.latent_dim,
-        hidden_dim=AEConfig.hidden_dim,
-    ).to(device)
-    ae.load_state_dict(torch.load(AEConfig.model_path))
-    ae.eval()
-    
-    for param in ae.parameters():
-        param.requires_grad = False  
 
     optimizer = optim.AdamW(
         emulator.parameters(),

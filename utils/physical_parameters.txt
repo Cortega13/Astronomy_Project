@@ -1,4 +1,0 @@
-Density
-Radfield
-av
-gasTemp
