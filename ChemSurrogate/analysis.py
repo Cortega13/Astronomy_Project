@@ -89,15 +89,15 @@ def benchmark_speed(DATASET, AE_CONFIG, EMULATOR_CONFIG):
 
 ### Plot Functions
 def histogram_physical_parameters(
-    config,
-    sampled_physical_parameters: np.array
+    sampled_physical_parameters: np.array,
+    savefig_path: str = "plots/parameter_sampling.png"
     ):
     """
     Generate histograms for the sampled physical conditions to visualize distribution.
     """
     
     fig, axs = plt.subplots(2, 2, figsize=(10, 8))
-    for i, param in enumerate(config.physical_parameters):
+    for i, param in enumerate(DatasetConfig.physical_parameters):
         row = i // 2
         col = i % 2
         axs[row, col].hist(np.log10(sampled_physical_parameters[:, i]), bins=200, color='steelblue', edgecolor='black')
@@ -106,7 +106,6 @@ def histogram_physical_parameters(
         axs[row, col].set_ylabel("Count")
     
     plt.tight_layout()
-    savefig_path = os.path.join(config.working_path, "plots/histogram_physical_parameters.png")
     plt.savefig(savefig_path, dpi=300, bbox_inches="tight")    
 
 
