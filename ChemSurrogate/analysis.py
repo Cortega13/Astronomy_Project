@@ -119,6 +119,9 @@ def plot_abundances_vs_time_comparison(
     Plotting the reconstructed and original abundances on a chemical evolution plot.
     This shows how accurate the reconstructed evolution is.
     """
+    physical_parameters = actual.loc[:, DatasetConfig.physical_parameters]
+    phys_params = physical_parameters.iloc[0]
+    params_text = "\n".join([f"{param}: {phys_params[param]:.3f}" for param in physical_parameters.columns])
     
     plt.figure(figsize=(10, 6))
     colors = plt.colormaps.get_cmap('tab20')
@@ -142,9 +145,9 @@ def plot_abundances_vs_time_comparison(
     plt.xlabel("Time (x1000 year)")
     plt.ylabel("Log Abundances (Relative to H nuclei)")
     plt.title("Log Abundances vs. Time")
-    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), title=params_text)
 
-    # Save the plot
     plt.tight_layout()
     plt.savefig(output_path, dpi=200, bbox_inches="tight")
     
@@ -260,9 +263,7 @@ def calculate_conservation_error(
     returns
     mean_original_elemental_abundances, mean_reconstruction_elemental_abundances, conservation_error
     
-    """
-    # Calculates the conservation error.
-    
+    """    
     unscaled_tensor1 = dp.conservation_matrix_mult(tensor1)
     unscaled_tensor2 = dp.conservation_matrix_mult(tensor2)
     conservation_error = torch.abs(unscaled_tensor1 - unscaled_tensor2) / unscaled_tensor1
