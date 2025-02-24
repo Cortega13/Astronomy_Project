@@ -75,7 +75,6 @@ def reconstruct_results(initial_conditions_with_time, decoded_features):
     
     physical_parameters = dp.inverse_physical_parameter_scaling(scaled_physical_parameters)
     
-    initial_conditions_with_time
     columns = DatasetConfig.physical_parameters + DatasetConfig.species
     results = torch.cat((physical_parameters, decoded_features.cpu()), dim=1)
     results_df = pd.DataFrame(results.numpy(), columns=columns)
