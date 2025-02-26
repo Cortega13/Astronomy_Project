@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+src/ChemSurrogate/__init__.py
+src/ChemSurrogate/analysis.py
+src/ChemSurrogate/configs.py
+src/ChemSurrogate/data_generation.py
+src/ChemSurrogate/data_processing.py
+src/ChemSurrogate/main.py
+src/ChemSurrogate/nn.py
+src/ChemSurrogate/train.py
+src/ChemSurrogate/utils.py
+src/ChemSurrogate.egg-info/PKG-INFO
+src/ChemSurrogate.egg-info/SOURCES.txt
+src/ChemSurrogate.egg-info/dependency_links.txt
+src/ChemSurrogate.egg-info/top_level.txt
