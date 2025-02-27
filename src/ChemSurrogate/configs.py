@@ -8,7 +8,7 @@ from ChemSurrogate import utils
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class DatasetConfig:
-    working_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # The path to the root folder of the project.
+    working_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) # The path to the root folder of the project.
     num_training_models =   60_000    # Each model has a different set of initial physical parameters. They all begin with identical initial abundances.
     num_validation_models = 20_000  
     num_timesteps_per_model = 100   # Duration that each model runs for. Multiply by timestep_duration to get total evolution time.
@@ -43,79 +43,50 @@ class DatasetConfig:
     validation_dataset_path = os.path.join(working_path, "data/validation.h5")
 
 
-class AEConfig:
+class ModelConfig:
+    window_size = 11
     # Model Config
-    model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
-    input_dim = DatasetConfig.num_species # input_dim = output_dim
-    hidden_dim = 600
-    latent_dim = 12
+    input_dim = DatasetConfig.num_species + DatasetConfig.num_physical_parameters
+    output_dim = DatasetConfig.num_species
+    hidden_dim = 300
+    latent_dim = 16
+    
     
     # Hyperparameters Config
-    lr = 1e-3
+    atol = 1e-5
+    rtol = 1e-2
+    lr = 1e-4
     lr_decay = 0.5
     lr_decay_patience = 5
-    betas = (0.7, 0.8)
-    weight_decay = 1e-4
+    betas = (0.8, 0.9)
+    weight_decay = 0
     loss_scaling_factor = 1e-3
-    exponential_coefficient = 20
-    alpha = 1e3
-    batch_size = 2*8192
+    exponential_coefficient = 22
+    alpha = 3e3
+    batch_size = 8192
     stagnant_epoch_patience = 20
     max_epochs = 999999
     gradient_clipping = 6
-    alpha = 1e3
-    pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
-    save_model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
+    pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/latentODE.pth")
+    save_model_path = os.path.join(DatasetConfig.working_path, "models/latentODE.pth")
     dropout = 0.1
+    noise = 0
     save_model = True
-
-    
-class EMConfig:
-    columns = DatasetConfig.metadata + DatasetConfig.physical_parameters + DatasetConfig.species
-    num_columns = len(columns)
-    # Model Config
-    input_dim = DatasetConfig.num_physical_parameters + AEConfig.latent_dim + 1 # The 1 is for the time input.
-    hidden_dim = 600
-    output_dim = AEConfig.latent_dim
-    
-    # Hyperparameters Config
-    lr = 1e-4
-    lr_decay = 0.8
-    lr_decay_patience = 6
-    betas = (0.5, 0.8)
-    weight_decay = 5e-5
-    loss_scaling_factor = 1e-3
-    exponential_coefficient = 26
-    alpha = 3e3
-    batch_size = 4*8192
-    stagnant_epoch_patience = 16
-    max_epochs = 999999
-    gradient_clipping = 2
-    pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/emulator.pth")
-    save_model_path = os.path.join(DatasetConfig.working_path, "models/emulator1.pth")
-    dropout = 0.2
-    save_model = True
-    shuffle = True
 
 
 class PredefinedTensors:
     ab_min = torch.tensor(DatasetConfig.abundances_lower_clipping, dtype=torch.float32).to(device)
     ab_max = torch.tensor(DatasetConfig.abundances_upper_clipping, dtype=torch.float32).to(device)
-
-    component_scalers_path = os.path.join(DatasetConfig.working_path, "utils/component_scalers.npy")
-    ae_min, ae_max = np.load(component_scalers_path)
-    ae_min = torch.tensor(ae_min, dtype=torch.float32).to(device)
-    ae_max = torch.tensor(ae_max, dtype=torch.float32).to(device)
     
     conservation_matrix = torch.tensor(DatasetConfig.conservation_matrix, dtype=torch.float32).to(device).contiguous()
     
     exponential = torch.log(torch.tensor(10, dtype=torch.float32)).to(device)
 
-    loss_scaling_factor = torch.tensor(EMConfig.loss_scaling_factor, dtype=torch.float32).to(device)
+    loss_scaling_factor = torch.tensor(ModelConfig.loss_scaling_factor, dtype=torch.float32).to(device)
     
-    exponential_coefficient = torch.tensor(EMConfig.exponential_coefficient, dtype=torch.float32).to(device)
+    exponential_coefficient = torch.tensor(ModelConfig.exponential_coefficient, dtype=torch.float32).to(device)
     
-    alpha = torch.tensor(EMConfig.alpha, dtype=torch.float32).to(device)
+    alpha = torch.tensor(ModelConfig.alpha, dtype=torch.float32).to(device)
     
     mace_max_abundance = torch.tensor(0.85, dtype=torch.float32).to(device)
     mace_factor = torch.tensor(468/335, dtype=torch.float32).to(device)

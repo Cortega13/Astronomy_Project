@@ -4,13 +4,15 @@ from datetime import datetime
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from .nn import Autoencoder, Emulator
+from .nn import LatentODEFunction, LatentODE
 from torch import optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.backends import cudnn
+import torchode as tode
+
 
 from . import data_processing as dp
-from .configs import DatasetConfig, AEConfig, EMConfig
+from .configs import DatasetConfig, ModelConfig
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 cudnn.benchmark = True
@@ -21,8 +23,6 @@ torch.backends.cudnn.allow_tf32 = True
 class Trainer:
     def __init__(
         self,
-        dataset_config,
-        model_config,
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
@@ -33,8 +33,7 @@ class Trainer:
         Initializes the Trainer class. A class which simplifies training by including all necessary components.
         """
         self.start_time = datetime.now()
-        self.model_config = model_config
-        
+
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -44,7 +43,7 @@ class Trainer:
                 
         self.metric_minimum_loss = np.inf
         self.epoch_validation_loss = torch.zeros(
-            dataset_config.num_species
+            DatasetConfig.num_species
         ).to(device)
         self.stagnant_epochs = 0
         self.loss_per_epoch = []
@@ -55,8 +54,8 @@ class Trainer:
         Saves the model's state dictionary to a file.
         """
         checkpoint = self.model.state_dict()
-        model_path = os.path.join(self.model_config.save_model_path)
-        if self.model_config.save_model:
+        model_path = os.path.join(ModelConfig.save_model_path)
+        if ModelConfig.save_model:
             torch.save(checkpoint, model_path)
 
 
@@ -64,7 +63,7 @@ class Trainer:
         """
         Ends training once the number of stagnant epochs exceeds the patience.
         """
-        if self.stagnant_epochs >= self.model_config.stagnant_epoch_patience:
+        if self.stagnant_epochs >= ModelConfig.stagnant_epoch_patience:
             print("Ending training early due to stagnant epochs.")
             return True
         return False
@@ -80,7 +79,7 @@ class Trainer:
         val_loss = self.epoch_validation_loss / self.num_validation_batches
         mean_loss = val_loss.mean().item()
         std_loss = val_loss.std().item()
-        metric = mean_loss + std_loss
+        metric = mean_loss# + std_loss
         
         if metric < self.metric_minimum_loss:
             print(f"New Minimum | Mean: {mean_loss:.3e} | Std: {std_loss:.3e} | Max: {val_loss.max():.3e}| Metric: {metric:.3e} | Percent Improvement: {(100-metric*100/self.metric_minimum_loss):.3f}%")
@@ -98,160 +97,25 @@ class Trainer:
         print()
 
 
-class AutoencoderTrainer(Trainer):
-    def __init__(
-        self,
-        autoencoder: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
-        training_dataloader: DataLoader,
-        validation_dataloader: DataLoader,
-        config
-    ) -> None:
-        """
-        Initializes the AutoencoderTrainer, a subclass of Trainer, specialized for training the autoencoder.
-        """
-        self.encoded_min = torch.tensor(999).to(device)
-        self.encoded_max = torch.tensor(-999).to(device)
-        
-        self.num_metadata = len(self.config.metadata)
-        self.num_physical_parameters = len(self.config.physical_parameters)
-        self.num_total_species = len(self.config.total_species)
-        self.num_components = self.config.latent_components
-        
-        self.ae = autoencoder
-        
-        super().__init__(
-            model=autoencoder,
-            ae=autoencoder,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            training_dataloader=training_dataloader,
-            validation_dataloader=validation_dataloader,
-            config=config
-        )
-
-
-    def _save_minmax_components(self):
-        """
-        Saves the minimum and maximum values of the encoded components.
-        """
-        minmax = torch.stack([self.encoded_min, self.encoded_max]).cpu().numpy()
-        np.save(self.config.minmax_scalers_path, minmax)
-
-
-    def _run_training_batch(self, features):
-        """
-        Runs a training batch where features = targets since this is an autoencoder.
-        """
-        self.optimizer.zero_grad()
-        outputs = self.model(features)
-        loss = self.training_criterion(outputs, features)
-        
-        self.encoded_min = min(outputs.min(), self.encoded_min)
-        self.encoded_max = max(outputs.max(), self.encoded_max)
-        
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.gradient_clipping)
-        self.optimizer.step()
-
-
-    def _run_validation_batch(self, features):
-        """
-        Runs a validation batch where features = targets since this is an autoencoder.
-        """
-        outputs = self.model(features)
-        loss = self.validation_criterion(outputs, features)
-        
-        self.encoded_min = min(outputs.min(), self.encoded_min)
-        self.encoded_max = max(outputs.max(), self.encoded_max)
-        
-        self.epoch_validation_loss += loss
-
-
-    def _run_epoch(self):
-        """
-        Since this is an autoencoder, there are no targets and thus the dataloaderss only have features.
-        """
-        tic1 = datetime.now()
-        self.model.train()
-        for features in self.training_dataloader:
-            features = features.to(device, non_blocking=True)
-            self._run_training_batch(features)
-
-        tic2 = datetime.now()
-        self.model.eval()
-        with torch.no_grad():
-            for features in self.validation_dataloader:
-                features = features.to(device, non_blocking=True)
-                self._run_validation_batch(features)
-
-        toc = datetime.now()
-        print(f"Training Time: {tic2 - tic1} | Validation Time: {toc - tic2}\n")
-
-
-    def train(self):
-        """
-        Training loop for the autoencoder. Runs until the minimum loss stagnates for a number of epochs.
-        """
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-
-        for epoch in range(self.model_config.max_epochs):
-            self._run_epoch(epoch)
-            self._check_minimum_loss()
-            if self._check_early_stopping():
-                break
-
-        self._save_minmax_components()
-
-        gc.collect()
-        torch.cuda.empty_cache()
-        print(f"\nTraining Complete. Trial Results: {self.metric_minimum_loss}")
-
-
-class EmulatorTrainer(Trainer):
-    def __init__(
-        self,
-        dataset_config,
-        ae_config,
-        em_config,
-        emulator: torch.nn.Module,
-        autoencoder: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
-        training_dataloader: DataLoader,
-        validation_dataloader: DataLoader,
-    ) -> None:
-        """
-        Initializes the EmulatorTrainer, a subclass of Trainer, specialized for train the emulator.
-        """
-        self.ae = autoencoder
-        
-        super().__init__(
-            dataset_config=dataset_config,
-            model_config=em_config,
-            model=emulator,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            training_dataloader=training_dataloader,
-            validation_dataloader=validation_dataloader,
-        )
-
-
     def _run_training_batch(self, features, targets):
         """
         Runs a single training batch.
         """
         self.optimizer.zero_grad(set_to_none=True)
-        outputs = self.model(features)
-        outputs = dp.inverse_latent_components_scaling(outputs)
-        outputs = self.ae.decode(outputs)
         
+        
+        timesteps = torch.linspace(0, 1, steps=DatasetConfig.num_timesteps_per_model+1)[1:targets.size(1)+1].to(device)
+        timesteps = timesteps.unsqueeze(0).repeat(targets.size(0), 1)
+        
+        physical_parameters = features[:, :DatasetConfig.num_physical_parameters]
+        species = features[:, DatasetConfig.num_physical_parameters:]
+        
+        outputs = self.model(timesteps, physical_parameters, species, is_training=True)
+                
         loss = dp.emulator_training_loss_function(outputs, targets)
+        
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.model_config.gradient_clipping)
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), ModelConfig.gradient_clipping)
         self.optimizer.step()
 
 
@@ -259,11 +123,15 @@ class EmulatorTrainer(Trainer):
         """
         Runs a single validation batch.
         """
-        outputs = self.model(features)
-        outputs = dp.inverse_latent_components_scaling(outputs)
-        outputs = self.ae.decode(outputs)
+        timesteps = torch.linspace(0, 1, steps=DatasetConfig.num_timesteps_per_model+1)[1:targets.size(1)+1].to(device)
+        timesteps = timesteps.unsqueeze(0).repeat(targets.size(0), 1)
         
-        loss = dp.emulator_validation_loss_function(outputs, targets)
+        physical_parameters = features[:, :DatasetConfig.num_physical_parameters]
+        species = features[:, DatasetConfig.num_physical_parameters:]
+        
+        outputs = self.model(timesteps, physical_parameters, species, is_training=True)
+                
+        loss = dp.emulator_validation_loss_function(outputs, targets).mean(dim=0)
         self.epoch_validation_loss += loss
 
 
@@ -304,7 +172,7 @@ class EmulatorTrainer(Trainer):
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
         
-        for epoch in range(self.model_config.max_epochs):
+        for epoch in range(9999999):
             self._run_epoch(epoch)
             self._check_minimum_loss()
             if self._check_early_stopping():
@@ -315,55 +183,52 @@ class EmulatorTrainer(Trainer):
         print(f"\nTraining Complete. Trial Results: {self.metric_minimum_loss}")
 
 
-def load_objects(is_inference=False, include_emulator=True):
-    
-    ae = Autoencoder(
-        input_dim=AEConfig.input_dim,
-        latent_dim=AEConfig.latent_dim,
-        hidden_dim=AEConfig.hidden_dim,
-        noise=0.0 if is_inference else AEConfig.noise,
-    ).to(device)
-    if os.path.exists(AEConfig.pretrained_model_path):
-        ae.load_state_dict(torch.load(AEConfig.pretrained_model_path))
+def load_objects(is_inference=False):
 
-    if include_emulator:
-        emulator = Emulator(
-            input_dim=EMConfig.input_dim,
-            output_dim=EMConfig.output_dim,
-            hidden_layer=EMConfig.hidden_dim,
-            dropout=0.0 if is_inference else EMConfig.dropout,
-        ).to(device)
-        if os.path.exists(EMConfig.pretrained_model_path):
-            print("Loading Pretrained Model")
-            emulator.load_state_dict(torch.load(EMConfig.pretrained_model_path))
-    else:
-        emulator = None
+    ode_func = LatentODEFunction(ModelConfig.latent_dim+4)
+    
+    odeterm = tode.ODETerm(ode_func, with_args=False)
+    step_method = tode.Dopri5(term=odeterm)
+    step_size_controller = tode.IntegralController(
+        atol = ModelConfig.atol,
+        rtol = ModelConfig.rtol,
+        term = odeterm
+    )
+    adjoint = tode.AutoDiffAdjoint(step_method, step_size_controller).to(device)
+    jit_solver = torch.compile(adjoint)
+    
+    model = LatentODE(
+        input_dim = ModelConfig.output_dim,
+        hidden_dim = ModelConfig.hidden_dim,
+        latent_dim = ModelConfig.latent_dim,
+        output_dim = ModelConfig.output_dim,
+        jit_solver = jit_solver,
+        dropout = ModelConfig.dropout,
+    ).to(device)
+    
+    if os.path.exists(ModelConfig.pretrained_model_path):
+        print("Loading Pretrained Model")
+        model.load_state_dict(torch.load(ModelConfig.pretrained_model_path, weights_only=True))
+
     
     if is_inference:
-        ae.eval()
-    
-        for param in ae.parameters():
+        model.eval()
+        for param in model.parameters():
             param.requires_grad = False
 
-        if include_emulator:
-            emulator.eval()
-            for param in emulator.parameters():
-                param.requires_grad = False
-    
-
     optimizer = optim.AdamW(
-        emulator.parameters(),
-        lr=EMConfig.lr,
-        betas=EMConfig.betas,
-        weight_decay=EMConfig.weight_decay,
+        model.parameters(),
+        lr=ModelConfig.lr,
+        betas=ModelConfig.betas,
+        weight_decay=ModelConfig.weight_decay,
         fused=True,
     )
     
     scheduler = ReduceLROnPlateau(
         optimizer,
         mode="min",
-        factor=EMConfig.lr_decay,
-        patience=EMConfig.lr_decay_patience,
+        factor=ModelConfig.lr_decay,
+        patience=ModelConfig.lr_decay_patience,
     )
 
-    return emulator, ae, optimizer, scheduler
+    return model, optimizer, scheduler

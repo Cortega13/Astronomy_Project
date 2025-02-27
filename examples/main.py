@@ -1,16 +1,14 @@
 #from data_generation import DataGenerator
-from . import data_processing as dp
+from ChemSurrogate import data_processing as dp
 import gc
 import torch
-from .train import (
-    AutoencoderTrainer, 
-    EmulatorTrainer,
-    load_objects
+from ChemSurrogate.train import (
+    Trainer,
+    load_objects,
 )
-from .configs import (
+from ChemSurrogate.configs import (
     DatasetConfig,
-    AEConfig,
-    EMConfig
+    ModelConfig,
 )
 
 if __name__ == "__main__":
@@ -46,30 +44,25 @@ if __name__ == "__main__":
     # # We minmax scale the encoded abundances to (0, 1).
     # scalars_generator.emulator()    
     # Train the emulator. It's a MLP which takes timestep, physical parameters, and encoded abundances as input and predicts the abundances at the next timestep.
-    # training_np, validation_np = dp.load_datasets(EMConfig.columns)
-    # training_dataset = dp.prepare_emulator_dataset(DatasetConfig, AEConfig, training_np)
-    # validation_dataset = dp.prepare_emulator_dataset(DatasetConfig, AEConfig, validation_np)
+    training_np, validation_np = dp.load_datasets()
+    training_dataset, training_indices = dp.prepare_emulator_dataset(training_np)
+    validation_dataset, validation_indices = dp.prepare_emulator_dataset(validation_np)
     
     # dp.save_tensors_to_hdf5(training_dataset, category="training")
     # dp.save_tensors_to_hdf5(validation_dataset, category="validation")
-
-    training_dataset, training_indices = dp.load_tensors_from_hdf5(category="training")
-    validation_dataset, validation_indices = dp.load_tensors_from_hdf5(category="validation")
+    # training_dataset, training_indices = dp.load_tensors_from_hdf5(category="training")
+    # validation_dataset, validation_indices = dp.load_tensors_from_hdf5(category="validation")
     
     training_Dataset = dp.RowRetrievalDataset(training_dataset, training_indices)
     validation_Dataset = dp.RowRetrievalDataset(validation_dataset, validation_indices)
     del training_dataset, validation_dataset, training_indices, validation_indices
 
-    training_dataloader = dp.tensor_to_dataloader(EMConfig, training_Dataset, is_emulator=True)
-    validation_dataloader = dp.tensor_to_dataloader(EMConfig, validation_Dataset, is_emulator=True)
+    training_dataloader = dp.tensor_to_dataloader(training_Dataset)
+    validation_dataloader = dp.tensor_to_dataloader(validation_Dataset)
     
-    emulator, autoencoder, optimizer, scheduler = load_objects()
-    emulator_trainer = EmulatorTrainer(
-        DatasetConfig,
-        AEConfig,
-        EMConfig,
-        emulator,
-        autoencoder,
+    model, optimizer, scheduler = load_objects()
+    emulator_trainer = Trainer(
+        model,
         optimizer,
         scheduler,
         training_dataloader,
