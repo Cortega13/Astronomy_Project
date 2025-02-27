@@ -1,13 +1,13 @@
 #from data_generation import DataGenerator
-from . import data_processing as dp
+from ChemSurrogate import data_processing as dp
 import gc
 import torch
-from .train import (
+from ChemSurrogate.train import (
     AutoencoderTrainer, 
     EmulatorTrainer,
     load_objects
 )
-from .configs import (
+from ChemSurrogate.configs import (
     DatasetConfig,
     AEConfig,
     EMConfig

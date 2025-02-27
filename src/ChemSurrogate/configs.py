@@ -8,7 +8,7 @@ from ChemSurrogate import utils
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class DatasetConfig:
-    working_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # The path to the root folder of the project.
+    working_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) # The path to the root folder of the project.
     num_training_models =   60_000    # Each model has a different set of initial physical parameters. They all begin with identical initial abundances.
     num_validation_models = 20_000  
     num_timesteps_per_model = 100   # Duration that each model runs for. Multiply by timestep_duration to get total evolution time.
@@ -67,6 +67,7 @@ class AEConfig:
     pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
     save_model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
     dropout = 0.1
+    noise = 0.0
     save_model = True
 
     
