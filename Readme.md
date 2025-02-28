@@ -1,11 +1,14 @@
 ## Setup Guide
 Firstly, clone this repository onto your device by running the following command.
-\n```git clone https://github.com/Cortega13/ChemSurrogate.git```
+
+```git clone https://github.com/Cortega13/ChemSurrogate.git```
 
 Then run the following to enter the correct directory.
+
 ```cd ChemSurrogate```
 
 Next, install the package using pip. Note: No necessary package dependencies are defined yet, so you must download them separately.
+
 ```pip install -e .```
 
 In order to validate the results of this model, you must download the dataset. The compressed version of this dataset is 9GB. You can download the dataset by downloading data.zip from the following Google Drive link.
