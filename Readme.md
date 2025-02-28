@@ -2,7 +2,7 @@
 I sampled both datasets separately since I used Latin Hypercube Sampling. The datasets use the following initial abundances and physical parameter ranges.
 
 All abundances are normalized to H nuclei abundance.
-![Initial Abundances](initial_abundances.png)
+![Initial Abundances](initial_abundances.jpeg)
 
 These physical parameters are sampled in log space.
 ![Physical Parameter Sampling](physical_parameter_sampling.png)
