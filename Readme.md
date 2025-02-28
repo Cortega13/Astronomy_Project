@@ -9,8 +9,7 @@ These physical parameters are sampled in log space.
 
 
 The following link holds the dataset in zip format on google drive. Inside are included two separate hdf5 files, one named uclchem_rawdata_training.h5 and the other uclchem_rawdata_validation.h5. The first holds 60k models and the second holds 20k models.
-[Link Text](https://drive.google.com/file/d/1PNDP17800zpXQSr70EuzCMdfhte9GtaV/view?usp=sharing)
-
+[Click Here to Download Dataset](https://drive.google.com/file/d/1PNDP17800zpXQSr70EuzCMdfhte9GtaV/view?usp=sharing)
 
 ### Gas-Grain Chemical Network Surrogate
 
