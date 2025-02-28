@@ -1,3 +1,17 @@
+### Training/Validation Dataset
+I sampled both datasets separately since I used Latin Hypercube Sampling. The datasets use the following initial abundances and physical parameter ranges.
+
+All abundances are normalized to H nuclei abundance.
+![Initial Abundances](initial_abundances.png)
+
+These physical parameters are sampled in log space.
+![Physical Parameter Sampling](physical_parameter_sampling.png)
+
+
+The following link holds the dataset in zip format on google drive. Inside are included two separate hdf5 files, one named uclchem_rawdata_training.h5 and the other uclchem_rawdata_validation.h5. The first holds 60k models and the second holds 20k models.
+[Link Text](https://drive.google.com/file/d/1PNDP17800zpXQSr70EuzCMdfhte9GtaV/view?usp=sharing)
+
+
 ### Gas-Grain Chemical Network Surrogate
 
 In order to use this surrogate model, refer to the Examples folder which contains notebooks showcasing how to use the models and generate plots.
