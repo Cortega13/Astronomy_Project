@@ -1,6 +1,6 @@
 ## Setup Guide
 Firstly, clone this repository onto your device by running the following command.
-```git clone https://github.com/Cortega13/ChemSurrogate.git```
+\n```git clone https://github.com/Cortega13/ChemSurrogate.git```
 
 Then run the following to enter the correct directory.
 ```cd ChemSurrogate```
