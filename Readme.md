@@ -5,6 +5,13 @@ All abundances are normalized to H nuclei abundance.
 ![Initial Abundances](initial_abundances.jpeg)
 
 These physical parameters are sampled in log space.
+| Parameter  | Range (Min, Max) | Units | Notes |
+|------------|----------------|--------|------------------------------------------------------------|
+| **Density**  | (1e1, 1e6)    | H nuclei per cm³ | Limits arbitrarily chosen. |
+| **Radfield** | (1e-3, 1e3)   | Habing field | Limits arbitrarily chosen. |
+| **Av**       | (1e-2, 1e4)   | Magnitudes | Limits arbitrarily chosen. |
+| **GasTemp**  | (10, 150)     | Kelvin | Grain reactions are too complex below 10K. Ice mostly sublimates at 150K, and UCLChem sets this as a strict constraint. |
+
 ![Physical Parameter Sampling](physical_parameter_sampling.png)
 
 
