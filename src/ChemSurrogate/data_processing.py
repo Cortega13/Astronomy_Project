@@ -25,20 +25,36 @@ class CSVtoHDF5Compressor:
         self.h5_store_path = os.path.join(work_path, output_filename)
         self.batch_size = 4192
         self.h5_store = pd.HDFStore(self.h5_store_path)
-        
+
     @staticmethod
     def rename_columns(columns):
-        """Renames columns to remove problematic characters."""
-        return [col.replace('#', 'Num')
+        """Renames columns to remove problematic characters and renames them to be more readable."""
+        name_mapping = {
+            'radfield': 'Radfield',
+            '@H2COH': '@H3CO',
+            'H2COH': 'H3CO',
+            'point': 'Model',
+            'H2CSH+': 'H3CS+',
+            'SISH+': 'HSIS+',
+            'E-': 'E_minus',
+            'HOSO+': 'HSO2+',
+            'H2COH+': 'H3CO+',
+            'OCSH+': 'HOCS+',
+            '#H2COH': '#H3CO',
+        }
+        columns = [col.strip() for col in columns]
+        columns = [name_mapping[col] if col in name_mapping else col for col in columns]
+        columns = [col.replace('#', 'SURF_')
                   .replace('+', 'Plus')
-                  .replace('@', 'At')
-                  .replace('-', '_minus')
-                  .replace(' ', '') for col in columns]
+                  .replace('@', 'BULK_') for col in columns]
+        return columns
     
+
     def process_and_store_data(self):
         """Reads CSV files, processes them, and stores them in an HDF5 file."""
         files_list = os.listdir(self.data_folder_path)
         batch_data = []
+        global_index = 0
         
         for i, file in enumerate(files_list):
             if i % 100 == 0:
@@ -47,6 +63,10 @@ class CSVtoHDF5Compressor:
             file_path = os.path.join(self.data_folder_path, file)
             single_model_data = pd.read_csv(file_path)
             single_model_data["Model"] = i
+            
+            row_count = len(single_model_data)
+            single_model_data["Index"] = range(global_index, global_index + row_count)
+            global_index += row_count
             
             single_model_data.columns = self.rename_columns(single_model_data.columns)
             
@@ -64,7 +84,8 @@ class CSVtoHDF5Compressor:
         
         print("Raw Data Saving Completed")
         self.h5_store.close()
-    
+
+
     def run(self):
         """Executes the full compression process."""
         self.process_and_store_data()
@@ -136,52 +157,6 @@ class DatasetCleaner:
         self.process_data()
 
 
-class ScalarsGenerator:
-    """
-    Generates the scalers for the autoencoder and the emulator.
-    The autoencoder clips abundances to be between (0, 1), so we obtain the min-max.
-    
-    The emulator clips physical parameters and latent components to (0, 1), so we obtain the min-max of the autoencoder outputs.
-    
-    This is done for easier NN training.
-    """
-    def __init__(self, config):
-        self.config = config
-        self.scalers = {}
-    
-    def _load_scalers(self):
-        try:
-            self.scalers = load(self.config.scalers_path)
-        except:
-            self.scalers = {}
-    
-    def _save_scalers(self):
-        dump(self.scalers, self.config.scalers_path)
-
-    def _compute_abundance_scalers(self):
-        for param in self.config.physical_parameter_ranges:
-            self.scalers[param] = np.log10(self.config.physical_parameter_ranges[param])
-        
-        species_global_min = np.log10(self.config.abundances_lower_clipping)
-        species_global_max = np.log10(self.config.abundances_upper_clipping)
-        
-        self.scalers["abundances"] = (species_global_min, species_global_max)
-
-    def _compute_encoded_scalers(self):
-        pass
-
-    def autoencoder(self):
-        self._load_scalers()
-        self._compute_abundance_scalers()
-        self._save_scalers()
-    
-    def emulator(self):
-        if not self.scalers:
-            self._load_scalers()
-        self._compute_encoded_scalers()
-        self._save_scalers()
-
-
 def load_datasets(
     columns: list
     ):
@@ -193,14 +168,14 @@ def load_datasets(
         DatasetConfig.training_dataset_path, 
         "models", 
         start=0, 
-        #stop=100,
+        stop=1000,
         #stop=1500000
         ).astype(np.float32)
     validation_dataset = pd.read_hdf(
         DatasetConfig.validation_dataset_path, 
         "models", 
         start=0, 
-        #stop=100,
+        stop=1000,
         #stop=1500000
         ).astype(np.float32)
     

@@ -36,12 +36,8 @@ class DatasetConfig:
     species_path = os.path.join(working_path, "utils/species.txt")
     species = np.loadtxt(species_path, dtype=str, delimiter=" ").tolist()
     
-    training_rawdataset_path = os.path.join(working_path, "data/uclchem_rawdata_training.h5")
-    validation_rawdataset_path = os.path.join(working_path, "data/uclchem_rawdata_validation.h5")
-    
-    training_dataset_path = os.path.join(working_path, "data/training.h5")
-    validation_dataset_path = os.path.join(working_path, "data/validation.h5")
-
+    training_dataset_path = os.path.join(working_path, "data/uclchem_training.h5")
+    validation_dataset_path = os.path.join(working_path, "data/uclchem_validation.h5")
 
 class AEConfig:
     # Model Config
