@@ -15,22 +15,22 @@ class DatasetConfig:
     timestep_duration = 1_000       # In years
     num_metadata = 3
     num_physical_parameters = 4
-    num_species = 335
+    num_species = 333
     physical_parameter_ranges = {
         "Density":  (1e1, 1e6),       # H nuclei per cm^3. Limits arbitrarily chosen.
         "Radfield": (1e-3, 1e3),     # Habing field. Limits arbitrarily chosen.
         "av":       (1e-2, 1e4),    # Magnitudes. Limits arbitrarily choisen.
         "gasTemp":  (10, 150),      # Kelvin. Grain reactions are too complex under 10 K. Ice mostly sublimates at 150 K and UCLChem sets it as a strict constraint.
     }
-    abundances_lower_clipping = np.log10(np.float32(1e-20))   # Abundances are arbitrarily clipped to 1e-20 since anything lower is insignificant.
-    abundances_upper_clipping = np.log10(np.float32(1))       # All abundances are relative to number of Hydrogen nuclei. Maximum abundance is all hydrogen in elemental form.
+    abundances_lower_clipping = np.float32(1e-20)   # Abundances are arbitrarily clipped to 1e-20 since anything lower is insignificant.
+    abundances_upper_clipping = np.float32(1)       # All abundances are relative to number of Hydrogen nuclei. Maximum abundance is all hydrogen in elemental form.
 
     initial_abundances_path = os.path.join(working_path, "utils/initial_abundances.npy")
     initial_abundances = np.load(initial_abundances_path)
     
     conservation_matrix_path = os.path.join(working_path, "utils/conservation_matrix.npy")
     conservation_matrix = np.load(conservation_matrix_path)
-    
+        
     metadata = ["Index", "Model", "Time"]
     physical_parameters = list(physical_parameter_ranges.keys())
     species_path = os.path.join(working_path, "utils/species.txt")
@@ -40,30 +40,29 @@ class DatasetConfig:
     validation_dataset_path = os.path.join(working_path, "data/uclchem_validation.h5")
 
 class AEConfig:
+    columns = DatasetConfig.species
+    num_columns = len(columns)
+    component_scalers_path = os.path.join(DatasetConfig.working_path, "utils/component_scalers.npy")
     # Model Config
-    model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
     input_dim = DatasetConfig.num_species # input_dim = output_dim
     hidden_dim = 600
     latent_dim = 12
     
     # Hyperparameters Config
     lr = 1e-3
-    lr_decay = 0.5
+    lr_decay = 0.6
     lr_decay_patience = 5
-    betas = (0.7, 0.8)
+    betas = (0.6, 0.7)
     weight_decay = 1e-4
-    loss_scaling_factor = 1e-3
+    loss_scaling_factor = 1e-2
     exponential_coefficient = 20
     alpha = 1e3
-    batch_size = 2*8192
+    batch_size = 8192
     stagnant_epoch_patience = 20
-    max_epochs = 999999
-    gradient_clipping = 6
-    alpha = 1e3
+    gradient_clipping = 4
     pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
     save_model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
-    dropout = 0.1
-    noise = 0.0
+    noise = 0.1
     save_model = True
 
     
@@ -77,16 +76,15 @@ class EMConfig:
     
     # Hyperparameters Config
     lr = 1e-4
-    lr_decay = 0.8
+    lr_decay = 0.6
     lr_decay_patience = 6
     betas = (0.5, 0.8)
     weight_decay = 5e-5
     loss_scaling_factor = 1e-3
-    exponential_coefficient = 26
+    exponential_coefficient = 20
     alpha = 3e3
     batch_size = 4*8192
     stagnant_epoch_patience = 16
-    max_epochs = 999999
     gradient_clipping = 2
     pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/emulator.pth")
     save_model_path = os.path.join(DatasetConfig.working_path, "models/emulator1.pth")
@@ -96,8 +94,8 @@ class EMConfig:
 
 
 class PredefinedTensors:
-    ab_min = torch.tensor(DatasetConfig.abundances_lower_clipping, dtype=torch.float32).to(device)
-    ab_max = torch.tensor(DatasetConfig.abundances_upper_clipping, dtype=torch.float32).to(device)
+    ab_min = torch.tensor(np.log10(DatasetConfig.abundances_lower_clipping), dtype=torch.float32).to(device)
+    ab_max = torch.tensor(np.log10(DatasetConfig.abundances_upper_clipping), dtype=torch.float32).to(device)
 
     component_scalers_path = os.path.join(DatasetConfig.working_path, "utils/component_scalers.npy")
     ae_min, ae_max = np.load(component_scalers_path)
@@ -108,11 +106,14 @@ class PredefinedTensors:
     
     exponential = torch.log(torch.tensor(10, dtype=torch.float32)).to(device)
 
-    loss_scaling_factor = torch.tensor(EMConfig.loss_scaling_factor, dtype=torch.float32).to(device)
+    AE_loss_scaling_factor = torch.tensor(AEConfig.loss_scaling_factor, dtype=torch.float32).to(device)
+    EM_loss_scaling_factor = torch.tensor(EMConfig.loss_scaling_factor, dtype=torch.float32).to(device)
     
-    exponential_coefficient = torch.tensor(EMConfig.exponential_coefficient, dtype=torch.float32).to(device)
+    AE_exponential_coefficient = torch.tensor(AEConfig.exponential_coefficient, dtype=torch.float32).to(device)
+    EM_exponential_coefficient = torch.tensor(EMConfig.exponential_coefficient, dtype=torch.float32).to(device)
     
-    alpha = torch.tensor(EMConfig.alpha, dtype=torch.float32).to(device)
+    AE_alpha = torch.tensor(AEConfig.alpha, dtype=torch.float32).to(device)
+    EM_alpha = torch.tensor(EMConfig.alpha, dtype=torch.float32).to(device)
     
     mace_max_abundance = torch.tensor(0.85, dtype=torch.float32).to(device)
     mace_factor = torch.tensor(468/335, dtype=torch.float32).to(device)

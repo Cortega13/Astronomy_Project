@@ -70,7 +70,7 @@ class CSVtoHDF5Compressor:
             
             single_model_data.columns = self.rename_columns(single_model_data.columns)
             
-            single_model_data = single_model_data.drop(columns=["zeta", "point", "dustTemp"], errors='ignore')
+            single_model_data = single_model_data.drop(columns=["zeta", "point", "dustTemp", "SURFACE", "BULK"], errors='ignore')
             single_model_data = single_model_data.astype(np.float32)
             single_model_data["Model"] = single_model_data["Model"].astype(int)
             single_model_data = single_model_data.drop(index=1, errors='ignore')
@@ -163,40 +163,52 @@ def load_datasets(
     """
     Datasets are loaded from hdf5 files, filtered to only contain the columns of interest, and converted to np arrays for speed.
     """
-    
     training_dataset = pd.read_hdf(
         DatasetConfig.training_dataset_path, 
         "models", 
         start=0, 
-        stop=1000,
+        #stop=1000,
         #stop=1500000
         ).astype(np.float32)
     validation_dataset = pd.read_hdf(
         DatasetConfig.validation_dataset_path, 
         "models", 
         start=0, 
-        stop=1000,
+        #stop=1000,
         #stop=1500000
         ).astype(np.float32)
     
-    training_np = training_dataset.sort_values(by=['Model', 'Time'])[columns].to_numpy()
-    validation_np = validation_dataset.sort_values(by=['Model', 'Time'])[columns].to_numpy()
+    training_dataset.sort_values(by=['Model', 'Time'], inplace=True)
+    validation_dataset.sort_values(by=['Model', 'Time'], inplace=True)
+    
+    training_np = training_dataset[columns].to_numpy()
+    validation_np = validation_dataset[columns].to_numpy()
 
+    training_np.clip(
+        DatasetConfig.abundances_lower_clipping,
+        DatasetConfig.abundances_upper_clipping,
+        out=training_np
+        )
+    validation_np.clip(
+        DatasetConfig.abundances_lower_clipping,
+        DatasetConfig.abundances_upper_clipping,
+        out=validation_np
+        )
     
     del training_dataset, validation_dataset
     return training_np, validation_np
 
 
-def generate_conservation_matrix(
-    dataset_config
-    ):
+def generate_conservation_matrix():
     """
     Generates a conservation matrix for the elements in the dataset.
     An unscaled vector of the species multiplied by this matrix will give the elemental abundances, which are conserved.
+    Additionally tracks BULK and SURFACE conservation.
     """
-    elements = ["H", "HE", "C", "N", "O", "S", "SI", "MG", "CL"]
-    conservation_matrix = np.zeros((len(elements), dataset_config.num_species))
-    modified_species = [s.replace("Num", "").replace("At", "") for s in dataset_config.species]
+    elements = ["H", "HE", "C", "N", "O", "S", "SI", "MG", "CL", "BULK", "SURFACE"]
+    conservation_matrix = np.zeros((len(elements), DatasetConfig.num_species))
+    modified_species = [s.replace("BULK_", "").replace("SURF_", "") for s in DatasetConfig.species]
+    
     elements_patterns = {
         'H': re.compile(r'H(?!E)(\d*)'),
         'HE': re.compile(r'HE(\d*)'),
@@ -208,13 +220,24 @@ def generate_conservation_matrix(
         'MG': re.compile(r'MG(\d*)'),
         'CL': re.compile(r'CL(\d*)'),
     }
+
     for element, pattern in elements_patterns.items():
-        elements.index(element)
+        elem_index = elements.index(element)
         for i, species in enumerate(modified_species):
             match = pattern.search(species)
             if match and species not in ["SURFACE", "BULK"]:
                 multiplier = int(match.group(1)) if match.group(1) else 1
-                conservation_matrix[elements.index(element), i] = multiplier
+                conservation_matrix[elem_index, i] = multiplier
+    
+    bulk_index = elements.index("BULK")
+    surface_index = elements.index("SURFACE")
+    
+    for i, species in enumerate(DatasetConfig.species):
+        if species.startswith("BULK_"):
+            conservation_matrix[bulk_index, i] = 1
+        elif species.startswith("SURF_"):
+            conservation_matrix[surface_index, i] = 1
+        
     return conservation_matrix.T
 
 
@@ -307,25 +330,25 @@ def calculate_conservation_loss(
     unscaled_tensor1 = inverse_abundances_scaling(tensor1)
     unscaled_tensor2 = inverse_abundances_scaling(tensor2)
     
-    elemental_abundances1 = conservation_matrix_mult(unscaled_tensor1)
-    elemental_abundances2 = conservation_matrix_mult(unscaled_tensor2)
-    
+    elemental_abundances1 = torch.abs(conservation_matrix_mult(unscaled_tensor1))
+    elemental_abundances2 = torch.abs(conservation_matrix_mult(unscaled_tensor2))
+        
     log_elemental_abundances1 = torch.log10(elemental_abundances1)
     log_elemental_abundances2 = torch.log10(elemental_abundances2)
-    
+        
     loss = torch.abs(log_elemental_abundances2 - log_elemental_abundances1).sum() / tensor1.size(0) # Divide by size to normalize across batches.
     
     return loss
 
 
-@torch.jit.script
+#@torch.jit.script
 def autoencoder_loss_function(
     outputs: torch.Tensor, 
     targets: torch.Tensor, 
-    alpha: torch.Tensor = PredefinedTensors.alpha,
+    alpha: torch.Tensor = PredefinedTensors.AE_alpha,
     exponential: torch.Tensor = PredefinedTensors.exponential,
-    exponential_coefficient: torch.Tensor = PredefinedTensors.exponential_coefficient,
-    loss_scaling_factor: torch.Tensor = PredefinedTensors.loss_scaling_factor,
+    exponential_coefficient: torch.Tensor = PredefinedTensors.AE_exponential_coefficient,
+    loss_scaling_factor: torch.Tensor = PredefinedTensors.AE_loss_scaling_factor,
     ):
     """
     This is the custom loss function for the autoencoder. It's a combination of the reconstruction loss and the conservation loss.
@@ -340,22 +363,18 @@ def autoencoder_loss_function(
     total_loss = elementwise_loss + alpha*conservation_error
     total_loss *= loss_scaling_factor
     
+    print(f"Recon: {elementwise_loss.detach():.3e} | Cons: {alpha*conservation_error.detach():.3e} | Total: {total_loss.detach():.3e}")
     return total_loss
-
-
-@torch.jit.script
-def autoencoder_validation_loss_function():
-    pass
 
 
 @torch.jit.script
 def emulator_training_loss_function(
     outputs, 
     targets, 
-    alpha: torch.Tensor = PredefinedTensors.alpha, 
-    loss_scaling_factor: torch.Tensor = PredefinedTensors.loss_scaling_factor,
+    alpha: torch.Tensor = PredefinedTensors.AE_alpha, 
+    loss_scaling_factor: torch.Tensor = PredefinedTensors.AE_loss_scaling_factor,
     exponential: torch.Tensor = PredefinedTensors.exponential,
-    exponential_coefficient: torch.Tensor = PredefinedTensors.exponential_coefficient,
+    exponential_coefficient: torch.Tensor = PredefinedTensors.AE_exponential_coefficient,
     ):
     """
     This is the custom loss function for the emulator. It's a combination of the predictive loss and the conservation loss.
@@ -373,7 +392,7 @@ def emulator_training_loss_function(
 
 
 @torch.jit.script
-def emulator_validation_loss_function(
+def validation_loss_function(
     outputs, 
     targets, 
     ):
@@ -384,6 +403,17 @@ def emulator_validation_loss_function(
     loss = (torch.abs(unscaled_targets - unscaled_outputs) / unscaled_targets)
         
     return torch.sum(loss, dim=0)
+
+
+class AutoencoderDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitems__(self, indices):
+        return self.data[indices], None
 
 
 class RowRetrievalDataset(Dataset):
@@ -417,7 +447,7 @@ class RowRetrievalDataset(Dataset):
         self,
         data_matrix: torch.Tensor,
         pair: torch.Tensor
-        ):
+        ):     
         features_indices = pair[:, 0]
         targets_indices = pair[:, 1]
         
@@ -433,9 +463,9 @@ class RowRetrievalDataset(Dataset):
         right_index = self.num_metadata + self.num_physical_parameters
         physical_parameters = features[:, left_index:right_index]
         encoded_components = features[:, -self.num_components:]        
-        merged = torch.cat((timesteps, physical_parameters, encoded_components, targets), dim=1)        
+        features = torch.cat((timesteps, physical_parameters, encoded_components), dim=1)        
         
-        return merged
+        return features, targets
 
 
     def __getitems__(
@@ -675,12 +705,8 @@ def load_tensors_from_hdf5(
     return dataset, indices
 
 
-def emulator_collate_function(
-    merged: torch.Tensor
-    ):
-    index_split = EMConfig.input_dim
-    features = merged[:, :index_split]
-    targets = merged[:, index_split:]
+def collate_function(batch):
+    features, targets = batch
         
     return features, targets
 
@@ -691,7 +717,8 @@ def tensor_to_dataloader(
     is_emulator: bool = False
     ):
     data_size = len(torchDataset)
-    sampler = ChunkedShuffleSampler(data_size, chunk_size=0.4*data_size)
+    multiplier = 0.4 if is_emulator else 1
+    sampler = ChunkedShuffleSampler(data_size, chunk_size=multiplier * data_size)
     dataloader = DataLoader(
         torchDataset,
         batch_size=training_config.batch_size,
@@ -699,7 +726,7 @@ def tensor_to_dataloader(
         num_workers=0,
         in_order=False,
         sampler=sampler,
-        collate_fn=emulator_collate_function if is_emulator else None
+        collate_fn=collate_function
     )
     return dataloader
 
