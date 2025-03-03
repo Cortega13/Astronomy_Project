@@ -199,14 +199,14 @@ def load_datasets(
     return training_np, validation_np
 
 
-def generate_conservation_matrix():
+def generate_stoichiometric_matrix():
     """
-    Generates a conservation matrix for the elements in the dataset.
+    Generates a stoichiometric matrix for the elements in the dataset.
     An unscaled vector of the species multiplied by this matrix will give the elemental abundances, which are conserved.
-    Additionally tracks BULK and SURFACE conservation.
+    Additionally tracks BULK and SURFACE stoichiometric.
     """
     elements = ["H", "HE", "C", "N", "O", "S", "SI", "MG", "CL", "BULK", "SURFACE"]
-    conservation_matrix = np.zeros((len(elements), DatasetConfig.num_species))
+    stoichiometric_matrix = np.zeros((len(elements), DatasetConfig.num_species))
     modified_species = [s.replace("BULK_", "").replace("SURF_", "") for s in DatasetConfig.species]
     
     elements_patterns = {
@@ -227,18 +227,18 @@ def generate_conservation_matrix():
             match = pattern.search(species)
             if match and species not in ["SURFACE", "BULK"]:
                 multiplier = int(match.group(1)) if match.group(1) else 1
-                conservation_matrix[elem_index, i] = multiplier
+                stoichiometric_matrix[elem_index, i] = multiplier
     
     bulk_index = elements.index("BULK")
     surface_index = elements.index("SURFACE")
     
     for i, species in enumerate(DatasetConfig.species):
         if species.startswith("BULK_"):
-            conservation_matrix[bulk_index, i] = 1
+            stoichiometric_matrix[bulk_index, i] = 1
         elif species.startswith("SURF_"):
-            conservation_matrix[surface_index, i] = 1
+            stoichiometric_matrix[surface_index, i] = 1
         
-    return conservation_matrix.T
+    return stoichiometric_matrix.T
 
 
 def abundances_scaling(
@@ -309,14 +309,14 @@ def inverse_latent_components_scaling(
 
 
 @torch.jit.script
-def conservation_matrix_mult(
+def stoichiometric_matrix_mult(
     tensor: torch.Tensor,
-    conservation_multipliers: torch.Tensor = PredefinedTensors.conservation_matrix,
+    stoichiometric_matrix: torch.Tensor = PredefinedTensors.stoichiometric_matrix,
     ):
     """
     Given a tensor of abundances, this function calculates the elemental abundances.
     """
-    return torch.matmul(tensor, conservation_multipliers)
+    return torch.matmul(tensor, stoichiometric_matrix)
 
 
 @torch.jit.script
@@ -330,9 +330,9 @@ def calculate_conservation_loss(
     unscaled_tensor1 = inverse_abundances_scaling(tensor1)
     unscaled_tensor2 = inverse_abundances_scaling(tensor2)
     
-    elemental_abundances1 = torch.abs(conservation_matrix_mult(unscaled_tensor1))
-    elemental_abundances2 = torch.abs(conservation_matrix_mult(unscaled_tensor2))
-        
+    elemental_abundances1 = torch.abs(stoichiometric_matrix_mult(unscaled_tensor1))
+    elemental_abundances2 = torch.abs(stoichiometric_matrix_mult(unscaled_tensor2))
+            
     log_elemental_abundances1 = torch.log10(elemental_abundances1)
     log_elemental_abundances2 = torch.log10(elemental_abundances2)
         
@@ -341,7 +341,7 @@ def calculate_conservation_loss(
     return loss
 
 
-#@torch.jit.script
+@torch.jit.script
 def autoencoder_loss_function(
     outputs: torch.Tensor, 
     targets: torch.Tensor, 
@@ -363,7 +363,7 @@ def autoencoder_loss_function(
     total_loss = elementwise_loss + alpha*conservation_error
     total_loss *= loss_scaling_factor
     
-    print(f"Recon: {elementwise_loss.detach():.3e} | Cons: {alpha*conservation_error.detach():.3e} | Total: {total_loss.detach():.3e}")
+    #print(f"Recon: {elementwise_loss.detach():.3e} | Cons: {alpha*conservation_error.detach():.3e} | Total: {total_loss.detach():.3e}")
     return total_loss
 
 
@@ -484,15 +484,17 @@ class ChunkedShuffleSampler(Sampler):
     chunk ordering due to a new random seed.
     """
     def __init__(
-        self, 
-        data_size: int, 
+        self,
+        data_size: int,
         chunk_size: int,
         seed: int = 42
     ):
         super().__init__()
         self.data_size = int(data_size)
         self.chunk_size = int(chunk_size)
-        
+        self.base_seed = seed
+        self.epoch = 0
+
         self.chunks = []
         start = 0
         while start < self.data_size:
@@ -500,8 +502,7 @@ class ChunkedShuffleSampler(Sampler):
             self.chunks.append((start, end))
             start = end
         
-        self.base_seed = seed
-        self.epoch = 0
+        self.generator = torch.Generator()
 
 
     def set_epoch(self, epoch: int):
@@ -509,16 +510,18 @@ class ChunkedShuffleSampler(Sampler):
 
 
     def __iter__(self):
-        epoch_seed = self.base_seed + self.epoch
-        random.seed(epoch_seed)
-        
-        random.shuffle(self.chunks)
-        
-        for start, end in self.chunks:
-            indices_in_chunk = list(range(start, end))
-            random.shuffle(indices_in_chunk)
-            for idx in indices_in_chunk:
-                yield idx
+        self.generator.manual_seed(self.base_seed + self.epoch)
+
+        chunk_indices = torch.randperm(len(self.chunks), generator=self.generator)
+
+        for chunk_idx in chunk_indices:
+            start, end = self.chunks[chunk_idx]
+            length = end - start
+
+            chunk_perm = torch.randperm(length, generator=self.generator)
+            chunk_perm += start
+
+            yield from chunk_perm.tolist()
 
 
     def __len__(self):

@@ -82,7 +82,8 @@ class Trainer:
         metric = mean_loss + std_loss
         
         if metric < self.metric_minimum_loss:
-            print(f"New Minimum | Mean: {mean_loss:.3e} | Std: {std_loss:.3e} | Max: {val_loss.max():.3e}| Metric: {metric:.3e} | Percent Improvement: {(100-metric*100/self.metric_minimum_loss):.3f}%")
+            print("**********************")
+            print(f"New Minimum \nMean: {mean_loss:.3e} \nStd: {std_loss:.3e} \nMax: {val_loss.max():.3e} \nMetric: {metric:.3e} \nPercent Improvement: {(100-metric*100/self.metric_minimum_loss):.3f}%")
             self._save_checkpoint()
             
             self.metric_minimum_loss = metric
@@ -90,12 +91,12 @@ class Trainer:
             self.loss_per_epoch.append(metric)
         else:
             self.stagnant_epochs += 1
-            print(f"Stagnant: {self.stagnant_epochs} | Minimum: {self.metric_minimum_loss:.3e} | Mean: {mean_loss:.3e} | Std: {std_loss:.3e} | Max: {val_loss.max():.3e}")
+            print(f"Stagnant {self.stagnant_epochs} \nMinimum: {self.metric_minimum_loss:.3e} \nMean: {mean_loss:.3e} \nStd: {std_loss:.3e} \nMax: {val_loss.max():.3e}")
         
         self.epoch_validation_loss.zero_()
         self.scheduler.step(metric)
         print()
-
+        print(f"Current Learning Rate: {self.optimizer.param_groups[0]['lr']:.3e}")
 
 class AutoencoderTrainer(Trainer):
     def __init__(

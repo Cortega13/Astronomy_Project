@@ -38,7 +38,6 @@ if __name__ == "__main__":
     # np.save(conservation_matrix_path, conservation_matrix)
     # print(conservation_matrix)
     
-    
     # Train the autoencoder. It's a simple autoencoder which enforces reconstruction and conservation error.
     training_np, validation_np = dp.load_datasets(AEConfig.columns)
 

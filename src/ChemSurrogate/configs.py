@@ -28,8 +28,8 @@ class DatasetConfig:
     initial_abundances_path = os.path.join(working_path, "utils/initial_abundances.npy")
     initial_abundances = np.load(initial_abundances_path)
     
-    conservation_matrix_path = os.path.join(working_path, "utils/conservation_matrix.npy")
-    conservation_matrix = np.load(conservation_matrix_path)
+    stoichiometric_matrix_path = os.path.join(working_path, "utils/stoichiometric_matrix.npy")
+    stoichiometric_matrix = np.load(stoichiometric_matrix_path)
         
     metadata = ["Index", "Model", "Time"]
     physical_parameters = list(physical_parameter_ranges.keys())
@@ -45,24 +45,24 @@ class AEConfig:
     component_scalers_path = os.path.join(DatasetConfig.working_path, "utils/component_scalers.npy")
     # Model Config
     input_dim = DatasetConfig.num_species # input_dim = output_dim
-    hidden_dim = 600
+    hidden_dim = 500
     latent_dim = 12
     
     # Hyperparameters Config
     lr = 1e-3
-    lr_decay = 0.6
-    lr_decay_patience = 5
+    lr_decay = 0.5
+    lr_decay_patience = 20
     betas = (0.6, 0.7)
     weight_decay = 1e-4
-    loss_scaling_factor = 1e-2
-    exponential_coefficient = 20
+    loss_scaling_factor = 1e-3
+    exponential_coefficient = 26
     alpha = 1e3
-    batch_size = 8192
+    batch_size = 1024
     stagnant_epoch_patience = 20
-    gradient_clipping = 4
+    gradient_clipping = 6
     pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
     save_model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
-    noise = 0.1
+    noise = 0.08
     save_model = True
 
     
@@ -102,7 +102,7 @@ class PredefinedTensors:
     ae_min = torch.tensor(ae_min, dtype=torch.float32).to(device)
     ae_max = torch.tensor(ae_max, dtype=torch.float32).to(device)
     
-    conservation_matrix = torch.tensor(DatasetConfig.conservation_matrix, dtype=torch.float32).to(device).contiguous()
+    stoichiometric_matrix = torch.tensor(DatasetConfig.stoichiometric_matrix, dtype=torch.float32).to(device).contiguous()
     
     exponential = torch.log(torch.tensor(10, dtype=torch.float32)).to(device)
 
