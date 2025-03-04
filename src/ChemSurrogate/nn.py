@@ -8,12 +8,10 @@ class Autoencoder(nn.Module):
         
         # Encoder
         self.encoder = nn.Sequential(
-            # Input Layer
             nn.Linear(input_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.GELU(),
             
-            # Encoder Hidden Layer
             nn.Linear(hidden_dim, latent_dim),
             nn.BatchNorm1d(latent_dim),
             nn.GELU(),
@@ -21,14 +19,12 @@ class Autoencoder(nn.Module):
 
         # Decoder
         self.decoder = nn.Sequential(
-            # Decoder Hidden Layer
             nn.Linear(latent_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.GELU(),
             
-            #Output Layer
             nn.Linear(hidden_dim, input_dim),
-            nn.Sigmoid(), # Data is normalized between 0 & 1. 
+            nn.Sigmoid(), # Data is normalized between 0 & 1
         )
         
         self.noise = noise

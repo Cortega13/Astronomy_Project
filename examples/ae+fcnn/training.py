@@ -39,67 +39,75 @@ if __name__ == "__main__":
     # print(conservation_matrix)
     
     # Train the autoencoder. It's a simple autoencoder which enforces reconstruction and conservation error.
-    training_np, validation_np = dp.load_datasets(AEConfig.columns)
+    # training_np, validation_np = dp.load_datasets(AEConfig.columns)
 
-    training_np_scaled = dp.abundances_scaling(training_np)
-    validation_np_scaled = dp.abundances_scaling(validation_np)
+    # training_np_scaled = dp.abundances_scaling(training_np)
+    # validation_np_scaled = dp.abundances_scaling(validation_np)
     
-    training_t = torch.from_numpy(training_np_scaled).to(torch.float32)
-    validation_t = torch.from_numpy(validation_np_scaled).to(torch.float32)
+    # training_t = torch.from_numpy(training_np_scaled).to(torch.float32)
+    # validation_t = torch.from_numpy(validation_np_scaled).to(torch.float32)
     
-    training_Dataset = dp.AutoencoderDataset(training_t)
-    validation_Dataset = dp.AutoencoderDataset(validation_t)
+    # training_Dataset = dp.AutoencoderDataset(training_t)
+    # validation_Dataset = dp.AutoencoderDataset(validation_t)
     
-    del training_np, validation_np, training_np_scaled, validation_np_scaled, training_t, validation_t
-    gc.collect()
+    # del training_np, validation_np, training_np_scaled, validation_np_scaled, training_t, validation_t
+    # gc.collect()
     
-    training_dataloader = dp.tensor_to_dataloader(AEConfig, training_Dataset, is_emulator=False)
-    validation_dataloader = dp.tensor_to_dataloader(AEConfig, validation_Dataset, is_emulator=False)
+    # training_dataloader = dp.tensor_to_dataloader(AEConfig, training_Dataset, is_emulator=False)
+    # validation_dataloader = dp.tensor_to_dataloader(AEConfig, validation_Dataset, is_emulator=False)
     
-    autoencoder, optimizer, scheduler = load_autoencoder_objects()
+    # autoencoder, optimizer, scheduler = load_autoencoder_objects()
     
-    autoencoder_trainer = AutoencoderTrainer(
-        autoencoder,
-        optimizer,
-        scheduler,
-        training_dataloader,
-        validation_dataloader
-        )
-    
-    autoencoder_trainer.train()
-    
-
-    # Train the emulator. It's a MLP which takes timestep, physical parameters, and encoded abundances as input and predicts the abundances at the next timestep.
-    # training_np, validation_np = dp.load_datasets(EMConfig.columns)
-    # training_dataset = dp.prepare_emulator_dataset(DatasetConfig, AEConfig, training_np)
-    # validation_dataset = dp.prepare_emulator_dataset(DatasetConfig, AEConfig, validation_np)
-    
-    # dp.save_tensors_to_hdf5(training_dataset, category="training")
-    # dp.save_tensors_to_hdf5(validation_dataset, category="validation")
-
-    # training_dataset, training_indices = dp.load_tensors_from_hdf5(category="training")
-    # validation_dataset, validation_indices = dp.load_tensors_from_hdf5(category="validation")
-    
-    # training_Dataset = dp.RowRetrievalDataset(training_dataset, training_indices)
-    # validation_Dataset = dp.RowRetrievalDataset(validation_dataset, validation_indices)
-    # del training_dataset, validation_dataset, training_indices, validation_indices
-
-    # training_dataloader = dp.tensor_to_dataloader(EMConfig, training_Dataset, is_emulator=True)
-    # validation_dataloader = dp.tensor_to_dataloader(EMConfig, validation_Dataset, is_emulator=True)
-    
-    # emulator, autoencoder, optimizer, scheduler = load_objects()
-    # emulator_trainer = EmulatorTrainer(
-    #     DatasetConfig,
-    #     AEConfig,
-    #     EMConfig,
-    #     emulator,
+    # autoencoder_trainer = AutoencoderTrainer(
     #     autoencoder,
     #     optimizer,
     #     scheduler,
     #     training_dataloader,
     #     validation_dataloader
     #     )
-    # emulator_trainer.train()
+    
+    # autoencoder_trainer.train()
+    
+    # Calculate the minmax of the latent components.
+    # training_np, validation_np = dp.load_datasets(AEConfig.columns)
+    # total_dataset = np.vstack((training_np, validation_np))
+    # del training_np, validation_np
+    
+    # component_scalers = dp.calculate_component_scalers(total_dataset)
+    # print(component_scalers)
+    
+    # component_scalers_path = DatasetConfig.working_path + "/utils/component_scalers.npy"
+    # np.save(component_scalers_path, component_scalers)
+
+    # Train the emulator. It's a MLP which takes timestep, physical parameters, and encoded abundances as input and predicts the abundances at the next timestep.
+    # training_np, validation_np = dp.load_datasets(EMConfig.columns)
+    
+    # training_dataset = dp.prepare_emulator_dataset(training_np)
+    # validation_dataset = dp.prepare_emulator_dataset(validation_np)
+    
+    # dp.save_tensors_to_hdf5(training_dataset, category="training")
+    # dp.save_tensors_to_hdf5(validation_dataset, category="validation")
+
+    training_dataset, training_indices = dp.load_tensors_from_hdf5(category="training")
+    validation_dataset, validation_indices = dp.load_tensors_from_hdf5(category="validation")
+        
+    training_Dataset = dp.RowRetrievalDataset(training_dataset, training_indices)
+    validation_Dataset = dp.RowRetrievalDataset(validation_dataset, validation_indices)
+    del training_dataset, validation_dataset, training_indices, validation_indices
+
+    training_dataloader = dp.tensor_to_dataloader(EMConfig, training_Dataset, is_emulator=True)
+    validation_dataloader = dp.tensor_to_dataloader(EMConfig, validation_Dataset, is_emulator=True)
+    
+    emulator, autoencoder, optimizer, scheduler = load_emulator_objects()
+    emulator_trainer = EmulatorTrainer(
+        emulator,
+        autoencoder,
+        optimizer,
+        scheduler,
+        training_dataloader,
+        validation_dataloader
+        )
+    emulator_trainer.train()
     
     
     # plot_generator = PlotGenerator(DATASET)

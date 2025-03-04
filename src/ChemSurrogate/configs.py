@@ -45,25 +45,25 @@ class AEConfig:
     component_scalers_path = os.path.join(DatasetConfig.working_path, "utils/component_scalers.npy")
     # Model Config
     input_dim = DatasetConfig.num_species # input_dim = output_dim
-    hidden_dim = 500
+    hidden_dim = 600
     latent_dim = 12
     
     # Hyperparameters Config
-    lr = 1e-3
+    lr = 6e-5
     lr_decay = 0.5
     lr_decay_patience = 20
     betas = (0.6, 0.7)
-    weight_decay = 1e-4
+    weight_decay = 0
     loss_scaling_factor = 1e-3
-    exponential_coefficient = 26
-    alpha = 1e3
-    batch_size = 1024
+    exponential_coefficient = 36
+    alpha = 1e2
+    batch_size = 8192
     stagnant_epoch_patience = 20
-    gradient_clipping = 6
+    gradient_clipping = 4
     pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
     save_model_path = os.path.join(DatasetConfig.working_path, "models/autoencoder.pth")
-    noise = 0.08
-    save_model = True
+    noise = 0.1
+    save_model = False
 
     
 class EMConfig:
@@ -76,18 +76,18 @@ class EMConfig:
     
     # Hyperparameters Config
     lr = 1e-4
-    lr_decay = 0.6
-    lr_decay_patience = 6
-    betas = (0.5, 0.8)
-    weight_decay = 5e-5
+    lr_decay = 0.8
+    lr_decay_patience = 5
+    betas = (0.5, 0.6)
+    weight_decay = 1e-3
     loss_scaling_factor = 1e-3
-    exponential_coefficient = 20
+    exponential_coefficient = 26
     alpha = 3e3
-    batch_size = 4*8192
-    stagnant_epoch_patience = 16
-    gradient_clipping = 2
+    batch_size = 12*8192
+    stagnant_epoch_patience = 20
+    gradient_clipping = 6
     pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/emulator.pth")
-    save_model_path = os.path.join(DatasetConfig.working_path, "models/emulator1.pth")
+    save_model_path = os.path.join(DatasetConfig.working_path, "models/emulator.pth")
     dropout = 0.2
     save_model = True
     shuffle = True

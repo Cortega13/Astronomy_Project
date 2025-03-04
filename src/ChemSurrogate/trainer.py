@@ -79,11 +79,12 @@ class Trainer:
         val_loss = self.epoch_validation_loss / self.num_validation_batches
         mean_loss = val_loss.mean().item()
         std_loss = val_loss.std().item()
-        metric = mean_loss + std_loss
+        max_loss = val_loss.max().item()
+        metric = mean_loss + std_loss + 0.5*max_loss
         
         if metric < self.metric_minimum_loss:
             print("**********************")
-            print(f"New Minimum \nMean: {mean_loss:.3e} \nStd: {std_loss:.3e} \nMax: {val_loss.max():.3e} \nMetric: {metric:.3e} \nPercent Improvement: {(100-metric*100/self.metric_minimum_loss):.3f}%")
+            print(f"New Minimum \nMean: {mean_loss:.3e} \nStd: {std_loss:.3e} \nMax: {max_loss:.3e} \nMetric: {metric:.3e} \nPercent Improvement: {(100-metric*100/self.metric_minimum_loss):.3f}%")
             self._save_checkpoint()
             
             self.metric_minimum_loss = metric
@@ -91,12 +92,13 @@ class Trainer:
             self.loss_per_epoch.append(metric)
         else:
             self.stagnant_epochs += 1
-            print(f"Stagnant {self.stagnant_epochs} \nMinimum: {self.metric_minimum_loss:.3e} \nMean: {mean_loss:.3e} \nStd: {std_loss:.3e} \nMax: {val_loss.max():.3e}")
+            print(f"Stagnant {self.stagnant_epochs} \nMinimum: {self.metric_minimum_loss:.3e} \nMean: {mean_loss:.3e} \nStd: {std_loss:.3e} \nMax: {max_loss:.3e}")
         
         self.epoch_validation_loss.zero_()
         self.scheduler.step(metric)
         print()
         print(f"Current Learning Rate: {self.optimizer.param_groups[0]['lr']:.3e}")
+
 
 class AutoencoderTrainer(Trainer):
     def __init__(
@@ -133,7 +135,7 @@ class AutoencoderTrainer(Trainer):
         self.optimizer.zero_grad()
         outputs = self.model(features)
         loss = dp.autoencoder_loss_function(outputs, features)
-        
+                
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), AEConfig.gradient_clipping)
         self.optimizer.step()
@@ -195,8 +197,6 @@ class AutoencoderTrainer(Trainer):
 class EmulatorTrainer(Trainer):
     def __init__(
         self,
-        dataset_config,
-        em_config,
         emulator: torch.nn.Module,
         autoencoder: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
@@ -210,8 +210,7 @@ class EmulatorTrainer(Trainer):
         self.ae = autoencoder
         
         super().__init__(
-            dataset_config=dataset_config,
-            model_config=em_config,
+            model_config=EMConfig,
             model=emulator,
             optimizer=optimizer,
             scheduler=scheduler,
@@ -224,14 +223,14 @@ class EmulatorTrainer(Trainer):
         """
         Runs a single training batch.
         """
-        self.optimizer.zero_grad(set_to_none=True)
+        self.optimizer.zero_grad()
         outputs = self.model(features)
         outputs = dp.inverse_latent_components_scaling(outputs)
         outputs = self.ae.decode(outputs)
-        
+                
         loss = dp.emulator_training_loss_function(outputs, targets)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.model_config.gradient_clipping)
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), EMConfig.gradient_clipping)
         self.optimizer.step()
 
 
@@ -244,17 +243,14 @@ class EmulatorTrainer(Trainer):
         outputs = self.ae.decode(outputs)
         
         loss = dp.validation_loss_function(outputs, targets)
+        
         self.epoch_validation_loss += loss
 
 
     def _run_epoch(self, epoch):
         """
         Runs a single epoch of training and validation.
-        """
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-        
+        """        
         self.training_dataloader.sampler.set_epoch(epoch)
         
         tic1 = datetime.now()
@@ -335,10 +331,13 @@ def load_emulator_objects(is_inference=False):
         input_dim=AEConfig.input_dim,
         latent_dim=AEConfig.latent_dim,
         hidden_dim=AEConfig.hidden_dim,
-        noise=0.0 if is_inference else AEConfig.noise,
     ).to(device)
     if os.path.exists(AEConfig.pretrained_model_path):
         ae.load_state_dict(torch.load(AEConfig.pretrained_model_path))
+    
+    ae.eval()
+    for param in ae.parameters():
+        param.requires_grad = False
 
     emulator = Emulator(
         input_dim=EMConfig.input_dim,
@@ -351,15 +350,10 @@ def load_emulator_objects(is_inference=False):
         emulator.load_state_dict(torch.load(EMConfig.pretrained_model_path))
 
     if is_inference:
-        ae.eval()
-        for param in ae.parameters():
-            param.requires_grad = False
-
         emulator.eval()
         for param in emulator.parameters():
             param.requires_grad = False
     
-
     optimizer = optim.AdamW(
         emulator.parameters(),
         lr=EMConfig.lr,
