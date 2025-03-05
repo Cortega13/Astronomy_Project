@@ -230,6 +230,8 @@ def plot_error_vs_time(
     """
     Helper function for plotting errors across time.
     """
+    save_path = os.path.join(DatasetConfig.working_path, save_path)
+    
     errors = errors.cpu().numpy()
     timesteps = np.arange(DatasetConfig.num_timesteps_per_model)
 
@@ -263,8 +265,8 @@ def calculate_conservation_error(
     mean_original_elemental_abundances, mean_reconstruction_elemental_abundances, conservation_error
     
     """    
-    unscaled_tensor1 = dp.conservation_matrix_mult(tensor1)
-    unscaled_tensor2 = dp.conservation_matrix_mult(tensor2)
+    unscaled_tensor1 = dp.stoichiometric_matrix_mult(tensor1)
+    unscaled_tensor2 = dp.stoichiometric_matrix_mult(tensor2)
     conservation_error = torch.abs(unscaled_tensor1 - unscaled_tensor2) / unscaled_tensor1
     return torch.mean(conservation_error, dim=1)
 

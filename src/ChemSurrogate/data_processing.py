@@ -290,6 +290,18 @@ def abundances_scaling(
     np.divide(abundances, (max_ - min_), out=abundances)
     return abundances
 
+def abundances_scaling_t(
+    abundances: torch.Tensor, 
+    min_: torch.Tensor = PredefinedTensors.ab_min.cpu(), 
+    max_: torch.Tensor = PredefinedTensors.ab_max.cpu(),
+    ):
+    """
+    Abundances are log10'd and then minmax scaled between (0, 1) for easier training.
+    """
+    abundances = torch.log10(abundances)
+    abundances = (abundances - min_) / (max_ - min_)
+    return abundances
+
 
 @torch.jit.script
 def inverse_abundances_scaling_cpu(
@@ -406,7 +418,7 @@ def autoencoder_loss_function(
     return total_loss
 
 
-@torch.jit.script
+#@torch.jit.script
 def emulator_training_loss_function(
     outputs,
     targets,
@@ -426,7 +438,7 @@ def emulator_training_loss_function(
     
     total_loss = elementwise_loss + alpha*conservation_error
     total_loss = total_loss * loss_scaling_factor
-    #print(f"Recon: {elementwise_loss:.3e} | Cons: {alpha*conservation_error:.3e} | Total: {total_loss:.3e}")
+    print(f"Recon: {elementwise_loss:.3e} | Cons: {alpha*conservation_error:.3e} | Total: {total_loss:.3e}")
     return total_loss
 
 
@@ -768,9 +780,18 @@ def reconstruct_emulated_outputs(encoded_inputs, emulated_outputs):
     return reconstructed_emulated_outputs
 
 
+def baseAvtoAv(
+    baseAv,
+    density
+    ):
+    """
+    This conversion is used internally in UCLCHEM. Our dataset has Av, although the dataset was generated using baseAv.
+    """
+    return baseAv + density * 0.0000964375
+
 ### Inferencing Functions
 def encoder_inferencing(autoencoder, inputs, batch_size=8192):
-    preencoded_features = abundances_scaling(inputs[:, -DatasetConfig.num_species:])
+    preencoded_features = abundances_scaling_t(inputs[:, -DatasetConfig.num_species:])
     encoded_features = []
     for batch_start in range(0, len(preencoded_features), batch_size):
         batch_end = min(batch_start + batch_size, len(preencoded_features))
@@ -798,12 +819,15 @@ def decoder_inferencing(autoencoder, emulated_features, batch_size=8192):
     return decoded_features
 
 
-def emulator_inferencing(emulator, encoded_inputs, scale_components=True, batch_size=8192):
+def emulator_inferencing(emulator, encoded_inputs, scale_components=True, convert_base_av=False, batch_size=8192):
     num_physical_parameters = DatasetConfig.num_physical_parameters
     
     if scale_components:
         encoded_inputs[:, 1+num_physical_parameters:] = latent_components_scaling(encoded_inputs[:, 1+num_physical_parameters:])
     
+    if convert_base_av:
+        encoded_inputs[:, 3] = baseAvtoAv(encoded_inputs[:, 3], encoded_inputs[:, 1]) # Convert baseav to av. 
+
     emulated_outputs = []
     for batch_start in range(0, len(encoded_inputs), batch_size):
         batch_end = min(batch_start + batch_size, len(encoded_inputs))
