@@ -386,9 +386,11 @@ def calculate_conservation_loss(
             
     log_elemental_abundances1 = torch.log10(elemental_abundances1)
     log_elemental_abundances2 = torch.log10(elemental_abundances2)
-        
-    loss = torch.abs(log_elemental_abundances2 - log_elemental_abundances1).sum() / tensor1.size(0) # Divide by size to normalize across batches.
     
+    log_elemental_abundances1[:, -2:] = log_elemental_abundances1[:, -2:]*0.5
+    log_elemental_abundances2[:, -2:] = log_elemental_abundances2[:, -2:]*0.5
+    
+    loss = torch.sum(torch.abs(log_elemental_abundances2 - log_elemental_abundances1)) / tensor1.size(0) # Divide by size to normalize across batches.
     return loss
 
 
@@ -418,7 +420,7 @@ def autoencoder_loss_function(
     return total_loss
 
 
-#@torch.jit.script
+@torch.jit.script
 def emulator_training_loss_function(
     outputs,
     targets,
@@ -438,7 +440,7 @@ def emulator_training_loss_function(
     
     total_loss = elementwise_loss + alpha*conservation_error
     total_loss = total_loss * loss_scaling_factor
-    print(f"Recon: {elementwise_loss:.3e} | Cons: {alpha*conservation_error:.3e} | Total: {total_loss:.3e}")
+    #print(f"Recon: {elementwise_loss:.3e} | Cons: {alpha*conservation_error:.3e} | Total: {total_loss:.3e}")
     return total_loss
 
 

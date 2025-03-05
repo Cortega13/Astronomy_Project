@@ -71,24 +71,24 @@ class EMConfig:
     num_columns = len(columns)
     # Model Config
     input_dim = DatasetConfig.num_physical_parameters + AEConfig.latent_dim + 1 # The 1 is for the time input.
-    hidden_dim = 600
+    hidden_dim = 300
     output_dim = AEConfig.latent_dim
     
     # Hyperparameters Config
-    lr = 1e-4
-    lr_decay = 0.8
-    lr_decay_patience = 5
+    lr = 1e-3
+    lr_decay = 0.6
+    lr_decay_patience = 3
     betas = (0.4, 0.5)
-    weight_decay = 1e-5
+    weight_decay = 2e-5
     loss_scaling_factor = 1e-3
-    exponential_coefficient = 26
-    alpha = 6e3
-    batch_size = 8192
+    exponential_coefficient = 18
+    alpha = 1e3
+    batch_size = 4*8192
     stagnant_epoch_patience = 20
-    gradient_clipping = 2
+    gradient_clipping = 1
     pretrained_model_path = os.path.join(DatasetConfig.working_path, "models/emulator.pth")
     save_model_path = os.path.join(DatasetConfig.working_path, "models/emulator.pth")
-    dropout = 0.2
+    dropout = 0.14
     save_model = True
     shuffle = True
 

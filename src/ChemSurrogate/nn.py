@@ -49,19 +49,19 @@ class Emulator(nn.Module):
         self.layers = nn.Sequential(
             #Input Layer
             nn.Linear(input_dim, hidden_layer),
-            nn.BatchNorm1d(hidden_layer),
+            nn.RMSNorm(hidden_layer),
             nn.GELU(),
             nn.Dropout(dropout),
 
             #Hidden Layer #1
             nn.Linear(hidden_layer, hidden_layer),
-            nn.BatchNorm1d(hidden_layer),
+            nn.RMSNorm(hidden_layer),
             nn.GELU(),
             nn.Dropout(dropout),
 
             #Hidden Layer #2
             nn.Linear(hidden_layer, hidden_layer),
-            nn.BatchNorm1d(hidden_layer),
+            nn.RMSNorm(hidden_layer),
             nn.GELU(),
             nn.Dropout(dropout),
 
@@ -72,3 +72,5 @@ class Emulator(nn.Module):
     
     def forward(self, x):
         return self.layers(x)
+
+
