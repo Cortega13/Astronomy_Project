@@ -8,23 +8,23 @@ class Autoencoder(nn.Module):
         
         # Encoder
         self.encoder = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
+            nn.Linear(input_dim, hidden_dim, bias=False),
             nn.BatchNorm1d(hidden_dim),
             nn.GELU(),
             
             nn.Linear(hidden_dim, latent_dim),
-            nn.BatchNorm1d(latent_dim),
+            nn.RMSNorm(latent_dim),
             nn.GELU(),
         )
 
         # Decoder
         self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim),
+            nn.Linear(latent_dim, hidden_dim, bias=False),
             nn.BatchNorm1d(hidden_dim),
             nn.GELU(),
             
             nn.Linear(hidden_dim, input_dim),
-            nn.Sigmoid(), # Data is normalized between 0 & 1
+            nn.ReLU(),
         )
         
         self.noise = noise
@@ -74,3 +74,46 @@ class Emulator(nn.Module):
         return self.layers(x)
 
 
+class ResidualBlock(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, dropout=0.0):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.RMSNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.RMSNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.RMSNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            
+            nn.Linear(hidden_dim, output_dim),
+        )
+        
+    def forward(self, x):
+        return x[:, 5:] + self.net(x)
+
+
+class RecursiveResNet(nn.Module):
+    def __init__(self, input_dim=17, hidden_dim=64, num_blocks=4, dropout=0.0):
+        super().__init__()
+        
+        self.blocks = nn.ModuleList([
+            ResidualBlock(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                output_dim=input_dim,
+                dropout=dropout
+            ) for _ in range(num_blocks)
+        ])
+        
+    def forward(self, x):
+        for block in self.blocks:
+            x = block(x)
+        return x

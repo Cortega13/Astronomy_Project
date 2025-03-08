@@ -290,6 +290,7 @@ def abundances_scaling(
     np.divide(abundances, (max_ - min_), out=abundances)
     return abundances
 
+
 def abundances_scaling_t(
     abundances: torch.Tensor, 
     min_: torch.Tensor = PredefinedTensors.ab_min.cpu(), 
@@ -647,19 +648,14 @@ def inverse_physical_parameter_scaling(
     to recover the original physical parameter values.
     """
     num_physical_parameters = len(DatasetConfig.physical_parameters)
-    
-    # Inverse min-max scaling and exponentiation (log10 inverse) of the physical parameters.
-    right_index = num_physical_parameters
-    
+        
     for idx, parameter in enumerate(DatasetConfig.physical_parameter_ranges):
         param_min, param_max = DatasetConfig.physical_parameter_ranges[parameter]
         log_param_min, log_param_max = np.log10(param_min), np.log10(param_max)
         
-        # Inverse min-max scaling
         scaled_dataset_t[:, idx] = scaled_dataset_t[:, idx] * (log_param_max - log_param_min) + log_param_min
         
-    # Inverse log10 scaling (exponentiation)
-    scaled_dataset_t[:, :right_index] = 10 ** scaled_dataset_t[:, :right_index]
+    scaled_dataset_t[:, :num_physical_parameters] = 10 ** scaled_dataset_t[:, :num_physical_parameters]
     
     return scaled_dataset_t
 
